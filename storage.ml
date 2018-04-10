@@ -1,6 +1,10 @@
+module Scopes = struct
+  let devstorage_read_only = "https://www.googleapis.com/auth/devstorage.read_only"
+end
+
 let get_object (bucket_name : string) (object_path : string) : string option Lwt.t =
   let open Lwt.Infix in
-  Auth.get_access_token ~scopes:["https://www.googleapis.com/auth/devstorage.read_only"] () >>= fun token_info ->
+  Auth.get_access_token ~scopes:[Scopes.devstorage_read_only] () >>= fun token_info ->
   let uri = Uri.make ()
       ~scheme:"https"
       ~host:"www.googleapis.com"

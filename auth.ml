@@ -70,7 +70,7 @@ module Cloud_sdk = struct
       (fun process_in ->
          let open Lwt.Infix in
          process_in#status >>= fun status ->
-         Lwt_io.read process_in#stdout)
+         Lwt_io.read process_in#stdout >|= String.trim)
 end
 
 type error =
@@ -198,7 +198,10 @@ let access_token_of_response (resp, body : Cohttp.Response.t * Cohttp_lwt.Body.t
       | Yojson.Basic.Util.Type_error (msg, _) ->
         Lwt.return_error `Bad_token_response
     end
-  | _ -> Lwt.return_error `Bad_token_response
+  | _ ->
+    Cohttp_lwt.Body.to_string body >>= fun body_str ->
+    Lwt_log.error_f ~section "response: %s" body_str >>= fun () ->
+    Lwt.return_error `Bad_token_response
 
 let access_token_of_credentials (scopes : string list) (credentials : credentials)
   : (access_token, [> `Bad_token_response ]) result Lwt.t =
@@ -368,7 +371,7 @@ let get_access_token ?(scopes : string list = []) () : token_info Lwt.t =
   | Ok token_info -> Lwt.return token_info
   | Error error -> Lwt.fail (Error error)
 
-let get_project_id () =
+let get_project_id (scopes : string list) =
   let open Lwt.Infix in
-  get_access_token () >>= fun token_info ->
+  get_access_token ~scopes () >>= fun token_info ->
   Lwt.return token_info.project_id
