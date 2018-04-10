@@ -1,4 +1,6 @@
 (* https://developers.google.com/identity/protocols/OAuth2#serviceaccount *)
+(* https://github.com/GoogleCloudPlatform/google-auth-library-python/blob/7e1270b1e5a99171fee4abfef6a4b9217ed378d7/google/auth/_default.py#L186 *)
+
 let section = Lwt_log.Section.make "gcloud.auth"
 
 module Environment_vars = struct
@@ -18,6 +20,9 @@ end
 
 module Compute_engine = struct
   module Metadata = struct
+    type error =
+      [ `Bad_GCE_metadata_response of Cohttp.Code.status_code ]
+
     let metadata_ip_root =
       let metadata_ip =
         Sys.getenv_opt Environment_vars.gce_metadata_ip
@@ -44,13 +49,35 @@ module Compute_engine = struct
 
     let response_has_metadata_header (response : Cohttp.Response.t) =
       Cohttp.Header.get (Cohttp.Response.headers response) metadata_flavor_header = Some metadata_flavor_value
+
+    let ping () =
+      let uri = Uri.of_string metadata_ip_root in
+      Cohttp_lwt_unix.Client.get uri ~headers:metadata_headers
+
+    let get_project_id () : (string, [> `Bad_GCE_metadata_response of Cohttp.Code.status_code ]) Lwt_result.t =
+      let open Lwt.Infix in
+      let uri = Uri.of_string (Printf.sprintf "%s/project/project-id" metadata_root) in
+      Cohttp_lwt_unix.Client.get uri ~headers:metadata_headers >>= fun (resp, body) ->
+      match Cohttp.Response.status resp with
+      | `OK -> Cohttp_lwt.Body.to_string body |> Lwt_result.ok
+      | status -> `Bad_GCE_metadata_response status |> Lwt_result.fail
   end
+end
+
+module Cloud_sdk = struct
+  let get_project_id () =
+    Lwt_process.with_process_in ("gcloud", [| "gcloud"; "config"; "get-value"; "core/project" |])
+      (fun process_in ->
+         let open Lwt.Infix in
+         process_in#status >>= fun status ->
+         Lwt_io.read process_in#stdout)
 end
 
 type error =
   [ `Bad_token_response
   | `Bad_credentials_format
   | `No_credentials
+  | Compute_engine.Metadata.error
   ]
 
 exception Error of error
@@ -82,6 +109,7 @@ type token_info =
   ; token : access_token
   ; created_at : float
   ; scopes : string list
+  ; project_id : string option
   }
 
 let token_info_mvar : token_info option Lwt_mvar.t =
@@ -224,6 +252,12 @@ let access_token_of_credentials (scopes : string list) (credentials : credential
   in
   request >>= access_token_of_response
 
+let project_id_of_credentials (credentials : credentials) : string option =
+  match credentials with
+  | Service_account { project_id } -> Some project_id
+  | Authorized_user _
+  | GCE_metadata -> None
+
 let discover_credentials_with (discovery_mode : discovery_mode) =
   let open Lwt.Infix in
   Lwt_log.debug_f ~section "Attempting authentication using %s" (CCFormat.to_string pp_discovery_mode discovery_mode) >>= fun () ->
@@ -234,31 +268,40 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
       | None -> Lwt.return_error `No_credentials
       | Some credentials_file ->
         let open Lwt_result.Infix in
-        credentials_of_file credentials_file
+        credentials_of_file credentials_file >>= fun credentials ->
+        Lwt_result.return (credentials, project_id_of_credentials credentials)
     end
 
   | Discover_credentials_json_from_env ->
     let credentials_json = Sys.getenv_opt Environment_vars.google_application_credentials_json in
-    let open Lwt_result.Infix in
     begin match credentials_json with
       | None -> Lwt.return_error `No_credentials
       | Some json_str ->
-        credentials_of_string json_str
-        |> Lwt.return
+        let open Lwt_result.Infix in
+        credentials_of_string json_str |> Lwt.return >>= fun credentials ->
+        Lwt_result.return (credentials, project_id_of_credentials credentials)
     end
 
   | Discover_credentials_from_cloud_sdk_path ->
-    credentials_of_file Paths.application_default_credentials
+    let open Lwt_result.Infix in
+    credentials_of_file Paths.application_default_credentials >>= fun credentials ->
+    begin match project_id_of_credentials credentials with
+    | Some project_id -> Lwt_result.return (credentials, Some project_id)
+    | None ->
+      Cloud_sdk.get_project_id () |> Lwt_result.ok >>= fun project_id ->
+      Lwt_result.return (credentials, Some project_id)
+    end
 
   | Discover_credentials_from_gce_metadata ->
-    let uri = Uri.of_string Compute_engine.Metadata.metadata_ip_root in
     let ping =
       Lwt.catch
         (fun () ->
-           Cohttp_lwt_unix.Client.get uri ~headers:Compute_engine.Metadata.metadata_headers >>= fun (resp, body) ->
+           Compute_engine.Metadata.ping () >>= fun (resp, body) ->
            match Cohttp.Response.status resp with
            | `OK when Compute_engine.Metadata.response_has_metadata_header resp ->
-             Lwt.return_ok GCE_metadata
+             let open Lwt_result.Infix in
+             Compute_engine.Metadata.get_project_id () >>= fun project_id ->
+             Lwt.return_ok (GCE_metadata, Some project_id)
            | _ ->
              Lwt.return_error `No_credentials
         )
@@ -280,7 +323,7 @@ let rec first_ok ~(error : 'e) (fs : (unit -> ('a, 'e) result Lwt.t) list) : ('a
       | Error error -> first_ok ~error fs
     end
 
-let discover_credentials () : (credentials, error) Lwt_result.t =
+let discover_credentials () : (credentials * string option, error) Lwt_result.t =
   let open Lwt.Infix in
   [ Discover_credentials_path_from_env
   ; Discover_credentials_json_from_env
@@ -293,13 +336,14 @@ let discover_credentials () : (credentials, error) Lwt_result.t =
 let get_access_token ?(scopes : string list = []) () : token_info Lwt.t =
   let get_new_access_token scopes =
     let open Lwt_result.Infix in
-    discover_credentials () >>= fun credentials ->
+    discover_credentials () >>= fun (credentials, project_id) ->
     access_token_of_credentials scopes credentials >>= fun access_token ->
     Lwt_log.debug_f ~section "Authenticated OK" |> Lwt_result.ok >|= fun () ->
     { credentials
     ; token = access_token
     ; created_at = Unix.time ()
     ; scopes
+    ; project_id
     }
   in
   let has_requested_scopes token_info = CCList.subset ~eq:String.equal scopes token_info.scopes in
