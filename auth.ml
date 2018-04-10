@@ -338,7 +338,9 @@ let get_access_token ?(scopes : string list = []) () : token_info Lwt.t =
     let open Lwt_result.Infix in
     discover_credentials () >>= fun (credentials, project_id) ->
     access_token_of_credentials scopes credentials >>= fun access_token ->
-    Lwt_log.debug_f ~section "Authenticated OK" |> Lwt_result.ok >|= fun () ->
+    Lwt_log.debug_f ~section "Authenticated OK (project: %s)"
+      (project_id |> CCOpt.get_or ~default:"no project")
+    |> Lwt_result.ok >|= fun () ->
     { credentials
     ; token = access_token
     ; created_at = Unix.time ()
@@ -365,3 +367,8 @@ let get_access_token ?(scopes : string list = []) () : token_info Lwt.t =
   match token_info_result with
   | Ok token_info -> Lwt.return token_info
   | Error error -> Lwt.fail (Error error)
+
+let get_project_id () =
+  let open Lwt.Infix in
+  get_access_token () >>= fun token_info ->
+  Lwt.return token_info.project_id
