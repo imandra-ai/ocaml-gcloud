@@ -1,0 +1,14 @@
+(jbuild_version 1)
+
+(library
+ ((name gcloud)
+  (libraries
+   (lwt
+    yojson
+    cstruct
+    containers
+    cohttp
+    cohttp.lwt
+    jwt
+    nocrypto.lwt
+    x509))))
