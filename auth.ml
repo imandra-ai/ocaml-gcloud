@@ -1,6 +1,52 @@
 (* https://developers.google.com/identity/protocols/OAuth2#serviceaccount *)
 let section = Lwt_log.Section.make "gcloud.auth"
 
+module Environment_vars = struct
+  let google_application_credentials = "GOOGLE_APPLICATION_CREDENTIALS"
+  let google_application_credentials_json = "GOOGLE_APPLICATION_CREDENTIALS_JSON"
+
+  let gce_metadata_ip = "GCE_METADATA_IP"
+  let gce_metadata_root = "GCE_METADATA_ROOT"
+  let gce_metadata_timeout = "GCE_METADATA_TIMEOUT"
+end
+
+module Paths = struct
+  let application_default_credentials =
+    String.concat "/"
+      [ Sys.getenv "HOME"; ".config/gcloud/application_default_credentials.json" ]
+end
+
+module Compute_engine = struct
+  module Metadata = struct
+    let metadata_ip_root =
+      let metadata_ip =
+        Sys.getenv_opt Environment_vars.gce_metadata_ip
+        |> CCOpt.get_or ~default:"169.254.169.254"
+      in
+      Printf.sprintf "http://%s" metadata_ip
+
+    let metadata_root =
+      let host =
+        Sys.getenv_opt Environment_vars.gce_metadata_root
+        |> CCOpt.get_or ~default:"metadata.google.internal"
+      in
+      Printf.sprintf "http://%s/computeMetadata/v1" host
+
+    let metadata_flavor_header = "metadata-flavor"
+    let metadata_flavor_value = "Google"
+    let metadata_headers = Cohttp.Header.of_list [(metadata_flavor_header, metadata_flavor_value)]
+
+    let metadata_default_timeout =
+      let default = 3. in
+      Sys.getenv_opt Environment_vars.gce_metadata_timeout
+      |> CCOpt.map (fun str -> try float_of_string str with | Failure _ -> default)
+      |> CCOpt.get_or ~default
+
+    let response_has_metadata_header (response : Cohttp.Response.t) =
+      Cohttp.Header.get (Cohttp.Response.headers response) metadata_flavor_header = Some metadata_flavor_value
+  end
+end
+
 type error =
   [ `Bad_token_response
   | `Bad_credentials_format
@@ -9,13 +55,31 @@ type error =
 
 exception Error of error
 
+type user_refresh_credentials =
+  { client_id : string
+  ; client_secret : string
+  ; refresh_token : string
+  }
+
+type service_account_credentials =
+  { client_email : string
+  ; private_key : string
+  ; project_id : string
+  }
+
+type credentials =
+  | Authorized_user of user_refresh_credentials
+  | Service_account of service_account_credentials
+  | GCE_metadata (* On Google Compute Engine, we don't need credentials *)
+
 type access_token =
   { access_token : string
   ; expires_in : int
   }
 
 type token_info =
-  { token : access_token
+  { credentials : credentials
+  ; token : access_token
   ; created_at : float
   ; scopes : string list
   }
@@ -29,21 +93,6 @@ let access_token_of_json (json : Yojson.Basic.json) : access_token =
   let expires_in = json |> member "expires_in" |> to_int in
   { access_token; expires_in }
 
-type user_refresh_credentials =
-  { client_id : string
-  ; client_secret : string
-  ; refresh_token : string
-  }
-
-type service_account_credentials =
-  { client_email : string
-  ; private_key : string
-  }
-
-type credentials =
-  | Authorized_user of user_refresh_credentials
-  | Service_account of service_account_credentials
-
 let authorized_user_credentials_of_json (json : Yojson.Basic.json) : user_refresh_credentials =
   let open Yojson.Basic.Util in
   let client_id = json |> member "client_id" |> to_string in
@@ -55,7 +104,8 @@ let service_account_credentials_of_json (json : Yojson.Basic.json) : service_acc
   let open Yojson.Basic.Util in
   let client_email = json |> member "client_email" |> to_string in
   let private_key = json |> member "private_key" |> to_string in
-  { client_email; private_key }
+  let project_id = json |> member "project_id" |> to_string in
+  { client_email; private_key; project_id }
 
 let credentials_of_json (json : Yojson.Basic.json) : credentials =
   let open Yojson.Basic.Util in
@@ -122,7 +172,7 @@ let access_token_of_response (resp, body : Cohttp.Response.t * Cohttp_lwt.Body.t
     end
   | _ -> Lwt.return_error `Bad_token_response
 
-let token_request_of_credentials (scopes : string list) (credentials : credentials)
+let access_token_of_credentials (scopes : string list) (credentials : credentials)
   : (access_token, [> `Bad_token_response ]) result Lwt.t =
   let open Lwt.Infix in
   let token_uri = Uri.make ()
@@ -130,15 +180,17 @@ let token_request_of_credentials (scopes : string list) (credentials : credentia
       ~host:"www.googleapis.com"
       ~path:"oauth2/v4/token"
   in
-  let params =
+  let request =
     match credentials with
     | Authorized_user c ->
-      Lwt.return
+      let params =
         [ ( "client_id", [ c.client_id ] )
         ; ( "client_secret", [ c.client_secret ] )
         ; ( "refresh_token", [ c.refresh_token ] )
         ; ( "grant_type", [ "refresh_token" ] )
         ]
+      in
+      Cohttp_lwt_unix.Client.post_form token_uri ~params
     | Service_account c ->
       let key =
         Cstruct.of_string c.private_key
@@ -157,74 +209,66 @@ let token_request_of_credentials (scopes : string list) (credentials : credentia
       in
       Lwt.wrap2 Jwt.t_of_header_and_payload header payload >>= fun jwt ->
       let token = Jwt.token_of_t jwt in
-      Lwt.return
+      let params =
         [ ( "grant_type", [ "urn:ietf:params:oauth:grant-type:jwt-bearer" ] )
         ; ( "assertion", [ token ] )
         ]
+      in
+      Cohttp_lwt_unix.Client.post_form token_uri ~params
+    | GCE_metadata ->
+      let uri =
+        Printf.sprintf "%s/instance/service-accounts/default/token" Compute_engine.Metadata.metadata_root
+        |> Uri.of_string
+      in
+      Cohttp_lwt_unix.Client.get uri ~headers:Compute_engine.Metadata.metadata_headers
   in
-  params >>= fun params ->
-  Cohttp_lwt_unix.Client.post_form token_uri ~params >>=
-  access_token_of_response
+  request >>= access_token_of_response
 
-let discover_credentials_with ?(scopes = []) (discovery_mode : discovery_mode) =
+let discover_credentials_with (discovery_mode : discovery_mode) =
   let open Lwt.Infix in
   Lwt_log.debug_f ~section "Attempting authentication using %s" (CCFormat.to_string pp_discovery_mode discovery_mode) >>= fun () ->
   match discovery_mode with
   | Discover_credentials_path_from_env -> begin
-      let credentials_file =
-        try
-          Some (Sys.getenv "GOOGLE_APPLICATION_CREDENTIALS")
-        with
-        | Not_found -> None
-      in
+      let credentials_file = Sys.getenv_opt Environment_vars.google_application_credentials in
       match credentials_file with
       | None -> Lwt.return_error `No_credentials
       | Some credentials_file ->
         let open Lwt_result.Infix in
-        credentials_of_file credentials_file >>= fun credentials ->
-        token_request_of_credentials scopes credentials
+        credentials_of_file credentials_file
     end
 
   | Discover_credentials_json_from_env ->
-    let credentials_json =
-      try
-        Some (Sys.getenv "GOOGLE_APPLICATION_CREDENTIALS_JSON")
-      with
-      | Not_found -> None
-    in
+    let credentials_json = Sys.getenv_opt Environment_vars.google_application_credentials_json in
     let open Lwt_result.Infix in
     begin match credentials_json with
       | None -> Lwt.return_error `No_credentials
       | Some json_str ->
         credentials_of_string json_str
         |> Lwt.return
-    end >>= fun credentials ->
-    token_request_of_credentials scopes credentials
+    end
 
   | Discover_credentials_from_cloud_sdk_path ->
-    let credentials_file =
-      String.concat "/"
-        [ Sys.getenv "HOME"; ".config/gcloud/application_default_credentials.json" ]
-    in
-    let open Lwt_result.Infix in
-    credentials_of_file credentials_file >>= fun credentials ->
-    token_request_of_credentials scopes credentials
+    credentials_of_file Paths.application_default_credentials
 
   | Discover_credentials_from_gce_metadata ->
-    let open Lwt.Infix in
-    let uri =
-      [ "http://metadata.google.internal/computeMetadata/v1/"
-      ; "instance/service-accounts/default/token"
-      ]
-      |> String.concat ""
-      |> Uri.of_string
+    let uri = Uri.of_string Compute_engine.Metadata.metadata_ip_root in
+    let ping =
+      Lwt.catch
+        (fun () ->
+           Cohttp_lwt_unix.Client.get uri ~headers:Compute_engine.Metadata.metadata_headers >>= fun (resp, body) ->
+           match Cohttp.Response.status resp with
+           | `OK when Compute_engine.Metadata.response_has_metadata_header resp ->
+             Lwt.return_ok GCE_metadata
+           | _ ->
+             Lwt.return_error `No_credentials
+        )
+        (fun exn -> Lwt.return_error `No_credentials)
     in
-    Lwt.catch
-      (fun () ->
-         Cohttp_lwt_unix.Client.get uri
-           ~headers:(Cohttp.Header.of_list [("Metadata-Flavor", "Google")])
-         >>= access_token_of_response)
-      (fun exn -> Lwt.return_error `No_credentials)
+    let timeout =
+      Lwt_unix.sleep Compute_engine.Metadata.metadata_default_timeout >>= fun () ->
+      Lwt.return_error `No_credentials
+    in
+    Lwt.pick [ ping; timeout ]
 
 let rec first_ok ~(error : 'e) (fs : (unit -> ('a, 'e) result Lwt.t) list) : ('a, 'e) result Lwt.t =
   match fs with
@@ -236,24 +280,24 @@ let rec first_ok ~(error : 'e) (fs : (unit -> ('a, 'e) result Lwt.t) list) : ('a
       | Error error -> first_ok ~error fs
     end
 
-let discover_credentials (scopes : string list) : (access_token, error) Lwt_result.t =
+let discover_credentials () : (credentials, error) Lwt_result.t =
   let open Lwt.Infix in
   [ Discover_credentials_path_from_env
   ; Discover_credentials_json_from_env
   ; Discover_credentials_from_cloud_sdk_path
   ; Discover_credentials_from_gce_metadata
   ]
-  |> List.map (fun discovery_mode ->
-      fun () -> discover_credentials_with ~scopes discovery_mode
-    )
+  |> List.map (fun discovery_mode -> fun () -> discover_credentials_with discovery_mode)
   |> first_ok ~error:`No_credentials
 
 let get_access_token ?(scopes : string list = []) () : token_info Lwt.t =
   let get_new_access_token scopes =
     let open Lwt_result.Infix in
-    discover_credentials scopes >>= fun access_token ->
+    discover_credentials () >>= fun credentials ->
+    access_token_of_credentials scopes credentials >>= fun access_token ->
     Lwt_log.debug_f ~section "Authenticated OK" |> Lwt_result.ok >|= fun () ->
-    { token = access_token
+    { credentials
+    ; token = access_token
     ; created_at = Unix.time ()
     ; scopes
     }
