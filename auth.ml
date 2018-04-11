@@ -92,6 +92,7 @@ type service_account_credentials =
   { client_email : string
   ; private_key : string
   ; project_id : string
+  ; token_uri : string
   }
 
 type credentials =
@@ -133,7 +134,8 @@ let service_account_credentials_of_json (json : Yojson.Basic.json) : service_acc
   let client_email = json |> member "client_email" |> to_string in
   let private_key = json |> member "private_key" |> to_string in
   let project_id = json |> member "project_id" |> to_string in
-  { client_email; private_key; project_id }
+  let token_uri = json |> member "token_uri" |> to_string in
+  { client_email; private_key; project_id; token_uri }
 
 let credentials_of_json (json : Yojson.Basic.json) : credentials =
   let open Yojson.Basic.Util in
@@ -206,14 +208,14 @@ let access_token_of_response (resp, body : Cohttp.Response.t * Cohttp_lwt.Body.t
 let access_token_of_credentials (scopes : string list) (credentials : credentials)
   : (access_token, [> `Bad_token_response ]) result Lwt.t =
   let open Lwt.Infix in
-  let token_uri = Uri.make ()
-      ~scheme:"https"
-      ~host:"www.googleapis.com"
-      ~path:"oauth2/v4/token"
-  in
   let request =
     match credentials with
     | Authorized_user c ->
+      let token_uri = Uri.make ()
+          ~scheme:"https"
+          ~host:"www.googleapis.com"
+          ~path:"oauth2/v4/token"
+      in
       let params =
         [ ( "client_id", [ c.client_id ] )
         ; ( "client_secret", [ c.client_secret ] )
@@ -234,7 +236,7 @@ let access_token_of_credentials (scopes : string list) (credentials : credential
         Jwt.empty_payload
         |> Jwt.add_claim Jwt.iss c.client_email
         |> Jwt.add_claim (Jwt.claim "scope") (String.concat " " scopes)
-        |> Jwt.add_claim Jwt.aud (Uri.to_string token_uri)
+        |> Jwt.add_claim Jwt.aud c.token_uri
         |> Jwt.add_claim Jwt.iat (Printf.sprintf "%.0f" now)
         |> Jwt.add_claim Jwt.exp (Printf.sprintf "%.0f" (now +. 3600.))
       in
@@ -245,7 +247,7 @@ let access_token_of_credentials (scopes : string list) (credentials : credential
         ; ( "assertion", [ token ] )
         ]
       in
-      Cohttp_lwt_unix.Client.post_form token_uri ~params
+      Cohttp_lwt_unix.Client.post_form (Uri.of_string c.token_uri) ~params
     | GCE_metadata ->
       let uri =
         Printf.sprintf "%s/instance/service-accounts/default/token" Compute_engine.Metadata.metadata_root
