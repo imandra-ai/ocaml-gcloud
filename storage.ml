@@ -62,21 +62,15 @@ type errors =
   ]
 
 let json_parse_err_or_json (body : Cohttp_lwt.Body.t) : (Yojson.Safe.json, [> `Json_parse_error of string]) Lwt_result.t =
-  (Lwt.catch
-     (fun () ->
-        let open Lwt.Infix in
-        (Cohttp_lwt.Body.to_string body >|= Yojson.Safe.from_string >|= CCResult.pure))
-     (fun e ->
-        (`Json_parse_error (Printexc.to_string e))
-        |> Lwt_result.fail
-     )
-  )
+  let open Lwt.Infix in
+  (Lwt_result.catch
+     (Cohttp_lwt.Body.to_string body >>= (Lwt.wrap1 Yojson.Safe.from_string)))
+  |> (Lwt_result.map_err (fun e -> `Json_parse_error (Printexc.to_string e)))
 
-let json_transform_err_or (parse : Yojson.Safe.json -> ('a, string) result) (json : Yojson.Safe.json)
+let json_transform_err_or (transform : Yojson.Safe.json -> ('a, string) result) (json : Yojson.Safe.json)
   : ('a, [> `Json_transform_error of string]) Lwt_result.t =
-  match (parse json) with
-   | Ok j -> Lwt_result.return j
-   | Error e -> Lwt_result.fail (`Json_parse_error e)
+  Lwt_result.lift (transform json)
+  |> (Lwt_result.map_err (fun e -> `Json_transform_error e))
 
 let as_gcloud_error (error_type : 'a) (error_resp : 'b) : ('c, [> gcloud_error]) Lwt_result.t =
   Lwt_result.fail (`Gcloud_error_resp (error_type, error_resp))
@@ -114,10 +108,13 @@ let list_objects (bucket_name : string) : (list_objects_response, errors) Lwt_re
   >>= fun (resp, body) ->
   match Cohttp.Response.status resp with
   | `OK ->
-    json_parse_err_or_json body >>= json_transform_err_or list_objects_response_of_yojson
+    json_parse_err_or_json body
+    >>= json_transform_err_or list_objects_response_of_yojson
 
   | `Not_found ->
-    json_parse_err_or_json body >>= json_transform_err_or error_response_of_yojson >>= (as_gcloud_error `Not_found)
+    json_parse_err_or_json body
+    >>= json_transform_err_or error_response_of_yojson
+    >>= (as_gcloud_error `Not_found)
 
   | x ->
     Lwt_result.fail (`Http_error x)
