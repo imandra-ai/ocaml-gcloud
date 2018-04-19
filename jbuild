@@ -2,10 +2,12 @@
 
 (library
  ((name gcloud)
+  (preprocess (pps (ppx_deriving_yojson)))
   (libraries
    (lwt
     yojson
     cstruct
+    ppx_deriving_yojson.runtime
     containers
     cohttp
     cohttp.lwt
