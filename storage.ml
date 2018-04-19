@@ -36,18 +36,18 @@ let get_object (bucket_name : string) (object_path : string) : string option Lwt
   | `Not_found -> Lwt.return_none
   | _ -> Cohttp_lwt.Body.to_string body >|= CCOpt.return
 
+type listed_object =
+  { name: string
+  ; time_created : string
+  (* Other fields not parsed currently *)
+  } [@@deriving yojson]
 
 type list_objects_response =
   { kind : string
   ; nextPageToken: string
   ; prefixes: string list
-  ; items : Yojson.Safe.json list
+  ; items : listed_object list
   } [@@deriving yojson]
-
-(* type 'a resp = *)
-(*   [ `Not_found of error_response *)
-(*   | `Ok of 'a *)
-(*   ] *)
 
 type gcloud_error =
   [`Gcloud_error_resp of ([`Not_found] * error_response)]
