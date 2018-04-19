@@ -49,44 +49,52 @@ type list_objects_response =
   ; items : listed_object list
   } [@@deriving yojson]
 
-type gcloud_error =
-  [`Gcloud_error_resp of ([`Not_found] * error_response)]
+type gcloud_error = ([`Not_found] * error_response)
+
+let string_of_gcloud_error : gcloud_error -> string = function
+  | `Not_found, e -> (Printf.sprintf "Not found: %s" (e |> error_response_to_yojson |> Yojson.Safe.to_string))
 
 type errors =
-  [ gcloud_error
+  (* TODO: normalise string vs execption ? *)
+  [ `Gcloud_error_resp of gcloud_error
   | `Gcloud_auth_error of exn
-  | `Json_parse_error of string
-  | `Json_transform_error of string
+  | `Json_parse_error of exn
+  | `Json_transform_error of exn
   | `Network_error of exn
   | `Http_error of Cohttp.Code.status_code
   ]
 
-let json_parse_err_or_json (body : Cohttp_lwt.Body.t) : (Yojson.Safe.json, [> `Json_parse_error of string]) Lwt_result.t =
+let string_of_error : errors -> string = function
+  | `Http_error s -> (Printf.sprintf "HTTP Error: %s" (Cohttp.Code.string_of_status s))
+  | `Network_error e -> (Printf.sprintf "Network Error: %s" (Printexc.to_string e))
+  | `Json_transform_error e -> (Printf.sprintf "JSON Transform Error: %s" (Printexc.to_string e))
+  | `Json_parse_error e -> (Printf.sprintf "JSON Parse Error: %s" (Printexc.to_string e))
+  | `Gcloud_error_resp ge -> (Printf.sprintf "GCloud Error: %s" (string_of_gcloud_error ge))
+  | `Gcloud_auth_error e -> (Printf.sprintf "GCloud Auth Error: %s" (Printexc.to_string e))
+
+let json_parse_err_or_json (body : Cohttp_lwt.Body.t) : (Yojson.Safe.json, [> `Json_parse_error of exn]) Lwt_result.t =
   let open Lwt.Infix in
   (Lwt_result.catch
      (Cohttp_lwt.Body.to_string body >>= (Lwt.wrap1 Yojson.Safe.from_string)))
-  |> (Lwt_result.map_err (fun e -> `Json_parse_error (Printexc.to_string e)))
+  |> (Lwt_result.map_err (fun e -> `Json_parse_error e))
+
+exception Json_transform_error of string
 
 let json_transform_err_or (transform : Yojson.Safe.json -> ('a, string) result) (json : Yojson.Safe.json)
-  : ('a, [> `Json_transform_error of string]) Lwt_result.t =
+  : ('a, [> `Json_transform_error of exn]) Lwt_result.t =
   Lwt_result.lift (transform json)
-  |> (Lwt_result.map_err (fun e -> `Json_transform_error e))
+  |> (Lwt_result.map_err (fun e -> `Json_transform_error (Json_transform_error e)))
 
-let as_gcloud_error (error_type : 'a) (error_resp : 'b) : ('c, [> gcloud_error]) Lwt_result.t =
+let as_gcloud_error (error_type : 'a) (error_resp : 'b) : ('c, [> `Gcloud_error_resp of gcloud_error]) Lwt_result.t =
   Lwt_result.fail (`Gcloud_error_resp (error_type, error_resp))
 
 let list_objects (bucket_name : string) : (list_objects_response, errors) Lwt_result.t =
   let open Lwt_result.Infix in
-  (Lwt.catch
-     (fun () ->
-        Auth.get_access_token ~scopes:[Scopes.devstorage_read_only] ()
-        |> Lwt_result.ok
-     )
-     (fun e ->
-        (`Gcloud_auth_error e)
-        |> Lwt_result.fail
-     )
-  )
+
+  (Auth.get_access_token ~scopes:[Scopes.devstorage_read_only] ()
+   |> Lwt_result.catch
+   |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e))
+
   >>= fun token_info ->
   (Lwt.catch
      (fun () ->
