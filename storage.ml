@@ -18,44 +18,12 @@ type error_response =
   ; message: string
   } [@@deriving yojson]
 
-let get_object (bucket_name : string) (object_path : string) : string option Lwt.t =
-  let open Lwt.Infix in
-  Auth.get_access_token ~scopes:[Scopes.devstorage_read_only] () >>= fun token_info ->
-  let uri = Uri.make ()
-      ~scheme:"https"
-      ~host:"www.googleapis.com"
-      ~path:(Printf.sprintf "storage/v1/b/%s/o/%s" bucket_name (Uri.pct_encode object_path))
-      ~query:[("alt", ["media"])]
-  in
-  Cohttp_lwt_unix.Client.get uri
-    ~headers:(Cohttp.Header.of_list
-                ["Authorization", Printf.sprintf "Bearer %s" token_info.Auth.token.access_token])
-  >>= fun (resp, body) ->
-  (* Lwt_log.notice_f "Response code: %s" (Cohttp.Response.status resp |> Cohttp.Code.string_of_status) >>= fun () -> *)
-  match Cohttp.Response.status resp with
-  | `Not_found -> Lwt.return_none
-  | _ -> Cohttp_lwt.Body.to_string body >|= CCOpt.return
-
-type listed_object =
-  { name: string
-  ; time_created : string [@key "timeCreated"]
-  (* Other fields not parsed currently *)
-  } [@@deriving yojson { strict = false }]
-
-type list_objects_response =
-  { kind : string
-  ; nextPageToken: string option [@default None]
-  ; prefixes: string list [@default []]
-  ; items : listed_object list
-  } [@@deriving yojson]
-
 type gcloud_error = ([`Not_found] * error_response)
 
 let string_of_gcloud_error : gcloud_error -> string = function
   | `Not_found, e -> (Printf.sprintf "Not found: %s" (e |> error_response_to_yojson |> Yojson.Safe.to_string))
 
 type errors =
-  (* TODO: normalise string vs execption ? *)
   [ `Gcloud_error_resp of gcloud_error
   | `Gcloud_auth_error of exn
   | `Json_parse_error of exn
@@ -87,6 +55,60 @@ let json_transform_err_or (transform : Yojson.Safe.json -> ('a, string) result) 
 
 let as_gcloud_error (error_type : 'a) (error_resp : 'b) : ('c, [> `Gcloud_error_resp of gcloud_error]) Lwt_result.t =
   Lwt_result.fail (`Gcloud_error_resp (error_type, error_resp))
+
+
+let get_object (bucket_name : string) (object_path : string) : (string, errors) Lwt_result.t =
+  let open Lwt_result.Infix in
+
+  (Auth.get_access_token ~scopes:[Scopes.devstorage_read_only] ()
+   |> Lwt_result.catch
+   |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e))
+
+  >>= fun token_info ->
+  (Lwt.catch
+     (fun () ->
+        let uri = Uri.make ()
+            ~scheme:"https"
+            ~host:"www.googleapis.com"
+            ~path:(Printf.sprintf "storage/v1/b/%s/o/%s" bucket_name (Uri.pct_encode object_path))
+            ~query:[("alt", ["media"])]
+        in
+        (Cohttp_lwt_unix.Client.get uri
+           ~headers:(Cohttp.Header.of_list
+                       ["Authorization", Printf.sprintf "Bearer %s" token_info.Auth.token.access_token]))
+        |> Lwt_result.ok
+     ))
+    (fun e ->
+       (`Network_error e)
+       |> Lwt_result.fail)
+
+  >>= fun (resp, body) ->
+  (* Lwt_log.notice_f "Response code: %s" (Cohttp.Response.status resp |> Cohttp.Code.string_of_status) >>= fun () -> *)
+  match Cohttp.Response.status resp with
+  | `OK ->
+    Cohttp_lwt.Body.to_string body |> Lwt_result.ok
+
+  | `Not_found ->
+    json_parse_err_or_json body
+    >>= json_transform_err_or error_response_of_yojson
+    >>= (as_gcloud_error `Not_found)
+
+  | x ->
+    Lwt_result.fail (`Http_error x)
+
+type listed_object =
+  { name : string
+  ; time_created : string [@key "timeCreated"]
+  ; id : string
+  (* Other fields not parsed currently *)
+  } [@@deriving yojson { strict = false }]
+
+type list_objects_response =
+  { kind : string
+  ; nextPageToken: string option [@default None]
+  ; prefixes: string list [@default []]
+  ; items : listed_object list
+  } [@@deriving yojson]
 
 let list_objects (bucket_name : string) : (list_objects_response, errors) Lwt_result.t =
   let open Lwt_result.Infix in
