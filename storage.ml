@@ -38,14 +38,14 @@ let get_object (bucket_name : string) (object_path : string) : string option Lwt
 
 type listed_object =
   { name: string
-  ; time_created : string
+  ; time_created : string [@key "timeCreated"]
   (* Other fields not parsed currently *)
-  } [@@deriving yojson]
+  } [@@deriving yojson { strict = false }]
 
 type list_objects_response =
   { kind : string
-  ; nextPageToken: string
-  ; prefixes: string list
+  ; nextPageToken: string option [@default None]
+  ; prefixes: string list [@default []]
   ; items : listed_object list
   } [@@deriving yojson]
 
