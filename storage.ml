@@ -87,12 +87,6 @@ let get_object (bucket_name : string) (object_path : string) : (string, errors) 
   match Cohttp.Response.status resp with
   | `OK ->
     Cohttp_lwt.Body.to_string body |> Lwt_result.ok
-
-  | `Not_found ->
-    json_parse_err_or_json body
-    >>= json_transform_err_or error_response_of_yojson
-    >>= (as_gcloud_error `Not_found)
-
   | x ->
     Lwt_result.fail (`Http_error x)
 
