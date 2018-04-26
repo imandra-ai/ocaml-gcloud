@@ -40,6 +40,9 @@ let string_of_error : errors -> string = function
   | `Gcloud_error_resp ge -> (Printf.sprintf "GCloud Error: %s" (string_of_gcloud_error ge))
   | `Gcloud_auth_error e -> (Printf.sprintf "GCloud Auth Error: %s" (Printexc.to_string e))
 
+let pp_error : errors CCFormat.printer =
+  CCFormat.of_to_string string_of_error
+
 let json_parse_err_or_json (body : Cohttp_lwt.Body.t) : (Yojson.Safe.json, [> `Json_parse_error of exn]) Lwt_result.t =
   let open Lwt.Infix in
   (Lwt_result.catch
@@ -73,9 +76,11 @@ let get_object (bucket_name : string) (object_path : string) : (string, [> error
             ~path:(Printf.sprintf "storage/v1/b/%s/o/%s" bucket_name (Uri.pct_encode object_path))
             ~query:[("alt", ["media"])]
         in
-        (Cohttp_lwt_unix.Client.get uri
-           ~headers:(Cohttp.Header.of_list
-                       ["Authorization", Printf.sprintf "Bearer %s" token_info.Auth.token.access_token]))
+        let headers =
+          Cohttp.Header.of_list
+            [ "Authorization", Printf.sprintf "Bearer %s" token_info.Auth.token.access_token ]
+        in
+        Cohttp_lwt_unix.Client.get uri ~headers
         |> Lwt_result.ok
      ))
     (fun e ->
@@ -83,10 +88,26 @@ let get_object (bucket_name : string) (object_path : string) : (string, [> error
        |> Lwt_result.fail)
 
   >>= fun (resp, body) ->
-  (* Lwt_log.notice_f "Response code: %s" (Cohttp.Response.status resp |> Cohttp.Code.string_of_status) >>= fun () -> *)
   match Cohttp.Response.status resp with
   | `OK ->
     Cohttp_lwt.Body.to_string body |> Lwt_result.ok
+  | `Not_found ->
+    Cohttp_lwt.Body.to_string body |> Lwt_result.ok >>= fun message ->
+    (** With alt=media, the API does not return a JSON error object, so we create one ourselves here. *)
+    let error_response =
+      { error =
+          { errors =
+              [ { domain = "global"
+                ; reason = "notFound"
+                ; message
+                }
+              ]
+          }
+      ; code = 404
+      ; message
+      }
+    in
+    as_gcloud_error `Not_found error_response
   | x ->
     Lwt_result.fail (`Http_error x)
 
@@ -119,9 +140,11 @@ let list_objects (bucket_name : string) : (list_objects_response, [> errors]) Lw
             ~host:"www.googleapis.com"
             ~path:(Printf.sprintf "storage/v1/b/%s/o" bucket_name)
         in
-        (Cohttp_lwt_unix.Client.get uri
-           ~headers:(Cohttp.Header.of_list
-                       ["Authorization", Printf.sprintf "Bearer %s" token_info.Auth.token.access_token]))
+        let headers =
+          Cohttp.Header.of_list
+            [ "Authorization", Printf.sprintf "Bearer %s" token_info.Auth.token.access_token ]
+        in
+        (Cohttp_lwt_unix.Client.get uri ~headers:headers)
         |> Lwt_result.ok
      )
      (fun e ->
