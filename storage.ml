@@ -57,7 +57,7 @@ let as_gcloud_error (error_type : 'a) (error_resp : 'b) : ('c, [> `Gcloud_error_
   Lwt_result.fail (`Gcloud_error_resp (error_type, error_resp))
 
 
-let get_object (bucket_name : string) (object_path : string) : (string, errors) Lwt_result.t =
+let get_object (bucket_name : string) (object_path : string) : (string, [> errors ]) Lwt_result.t =
   let open Lwt_result.Infix in
 
   (Auth.get_access_token ~scopes:[Scopes.devstorage_read_only] ()
@@ -104,7 +104,7 @@ type list_objects_response =
   ; items : listed_object list
   } [@@deriving yojson]
 
-let list_objects (bucket_name : string) : (list_objects_response, errors) Lwt_result.t =
+let list_objects (bucket_name : string) : (list_objects_response, [> errors]) Lwt_result.t =
   let open Lwt_result.Infix in
 
   (Auth.get_access_token ~scopes:[Scopes.devstorage_read_only] ()
