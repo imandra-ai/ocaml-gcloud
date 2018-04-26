@@ -46,7 +46,7 @@ let pp_error : errors CCFormat.printer =
 let json_parse_err_or_json (body : Cohttp_lwt.Body.t) : (Yojson.Safe.json, [> `Json_parse_error of exn]) Lwt_result.t =
   let open Lwt.Infix in
   (Lwt_result.catch
-     (Cohttp_lwt.Body.to_string body >>= (Lwt.wrap1 Yojson.Safe.from_string)))
+     (Cohttp_lwt.Body.to_string body >|= Yojson.Safe.from_string))
   |> (Lwt_result.map_err (fun e -> `Json_parse_error e))
 
 exception Json_transform_error of string
