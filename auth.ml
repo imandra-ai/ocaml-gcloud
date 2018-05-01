@@ -240,7 +240,7 @@ let access_token_of_credentials (scopes : string list) (credentials : credential
         |> Jwt.add_claim Jwt.iat (Printf.sprintf "%.0f" now)
         |> Jwt.add_claim Jwt.exp (Printf.sprintf "%.0f" (now +. 3600.))
       in
-      Lwt.wrap2 Jwt.t_of_header_and_payload header payload >>= fun jwt ->
+      let jwt = Jwt.t_of_header_and_payload header payload in
       let token = Jwt.token_of_t jwt in
       let params =
         [ ( "grant_type", [ "urn:ietf:params:oauth:grant-type:jwt-bearer" ] )
