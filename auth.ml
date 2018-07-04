@@ -7,6 +7,8 @@ module Environment_vars = struct
   let google_application_credentials = "GOOGLE_APPLICATION_CREDENTIALS"
   let google_application_credentials_json = "GOOGLE_APPLICATION_CREDENTIALS_JSON"
 
+  let google_project_id = "GOOGLE_PROJECT_ID"
+
   let gce_metadata_ip = "GCE_METADATA_IP"
   let gce_metadata_root = "GCE_METADATA_ROOT"
   let gce_metadata_timeout = "GCE_METADATA_TIMEOUT"
@@ -263,6 +265,12 @@ let project_id_of_credentials (credentials : credentials) : string option =
   | Authorized_user _
   | GCE_metadata -> None
 
+let discover_project_id (credentials : credentials) : string option =
+  CCOpt.choice
+    [ Sys.getenv_opt Environment_vars.google_project_id
+    ; project_id_of_credentials credentials
+    ]
+
 let discover_credentials_with (discovery_mode : discovery_mode) =
   let open Lwt.Infix in
   Lwt_log.debug_f ~section "Attempting authentication using %s" (CCFormat.to_string pp_discovery_mode discovery_mode) >>= fun () ->
@@ -274,7 +282,7 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
       | Some credentials_file ->
         let open Lwt_result.Infix in
         credentials_of_file credentials_file >>= fun credentials ->
-        Lwt_result.return (credentials, project_id_of_credentials credentials)
+        Lwt_result.return (credentials, discover_project_id credentials)
     end
 
   | Discover_credentials_json_from_env ->
@@ -284,13 +292,13 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
       | Some json_str ->
         let open Lwt_result.Infix in
         credentials_of_string json_str |> Lwt.return >>= fun credentials ->
-        Lwt_result.return (credentials, project_id_of_credentials credentials)
+        Lwt_result.return (credentials, discover_project_id credentials)
     end
 
   | Discover_credentials_from_cloud_sdk_path ->
     let open Lwt_result.Infix in
     credentials_of_file Paths.application_default_credentials >>= fun credentials ->
-    begin match project_id_of_credentials credentials with
+    begin match discover_project_id credentials with
     | Some project_id -> Lwt_result.return (credentials, Some project_id)
     | None ->
       Cloud_sdk.get_project_id () |> Lwt_result.ok >>= fun project_id ->
@@ -305,8 +313,13 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
            match Cohttp.Response.status resp with
            | `OK when Compute_engine.Metadata.response_has_metadata_header resp ->
              let open Lwt_result.Infix in
-             Compute_engine.Metadata.get_project_id () >>= fun project_id ->
-             Lwt.return_ok (GCE_metadata, Some project_id)
+             let credentials = GCE_metadata in
+             let project_id = discover_project_id credentials in
+             (match project_id with
+              | Some project_id -> Lwt_result.return project_id
+              | None -> Compute_engine.Metadata.get_project_id ()
+             ) >>= fun project_id ->
+             Lwt.return_ok (credentials, Some project_id)
            | _ ->
              Lwt.return_error `No_credentials
         )
