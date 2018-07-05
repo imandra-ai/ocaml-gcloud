@@ -12,5 +12,7 @@
     cohttp
     cohttp.lwt
     jwt
+    logs
+    logs.lwt
     nocrypto.lwt
     x509))))

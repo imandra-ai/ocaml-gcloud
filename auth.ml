@@ -1,7 +1,10 @@
 (* https://developers.google.com/identity/protocols/OAuth2#serviceaccount *)
 (* https://github.com/GoogleCloudPlatform/google-auth-library-python/blob/7e1270b1e5a99171fee4abfef6a4b9217ed378d7/google/auth/_default.py#L186 *)
 
-let section = Lwt_log.Section.make "gcloud.auth"
+let src =
+  Logs.Src.create "gcloud.auth"
+
+module L = (val Logs_lwt.src_log src)
 
 module Environment_vars = struct
   let google_application_credentials = "GOOGLE_APPLICATION_CREDENTIALS"
@@ -204,7 +207,7 @@ let access_token_of_response (resp, body : Cohttp.Response.t * Cohttp_lwt.Body.t
     end
   | _ ->
     Cohttp_lwt.Body.to_string body >>= fun body_str ->
-    Lwt_log.error_f ~section "response: %s" body_str >>= fun () ->
+    L.err (fun m -> m "response: %s" body_str) >>= fun () ->
     Lwt.return_error `Bad_token_response
 
 let access_token_of_credentials (scopes : string list) (credentials : credentials)
@@ -273,7 +276,7 @@ let discover_project_id (credentials : credentials) : string option =
 
 let discover_credentials_with (discovery_mode : discovery_mode) =
   let open Lwt.Infix in
-  Lwt_log.debug_f ~section "Attempting authentication using %s" (CCFormat.to_string pp_discovery_mode discovery_mode) >>= fun () ->
+  L.debug (fun m -> m "Attempting authentication using %a" pp_discovery_mode discovery_mode) >>= fun () ->
   match discovery_mode with
   | Discover_credentials_path_from_env -> begin
       let credentials_file = Sys.getenv_opt Environment_vars.google_application_credentials in
@@ -356,8 +359,9 @@ let get_access_token ?(scopes : string list = []) () : token_info Lwt.t =
     let open Lwt_result.Infix in
     discover_credentials () >>= fun (credentials, project_id) ->
     access_token_of_credentials scopes credentials >>= fun access_token ->
-    Lwt_log.debug_f ~section "Authenticated OK (project: %s)"
-      (project_id |> CCOpt.get_or ~default:"no project")
+    L.info (fun m ->
+        m "Authenticated OK (project: %s)"
+          (project_id |> CCOpt.get_or ~default:"no project"))
     |> Lwt_result.ok >|= fun () ->
     { credentials
     ; token = access_token
@@ -374,9 +378,9 @@ let get_access_token ?(scopes : string list = []) () : token_info Lwt.t =
       Lwt.return_ok token_info
     | Some token_info ->
       begin if is_expired token_info then
-          Lwt_log.debug ~section "Re-authenticating: Token is expired"
+          L.debug (fun m -> m "Re-authenticating: Token is expired")
         else
-          Lwt_log.debug ~section "Re-authenticating: Token does not have required scopes"
+          L.debug (fun m -> m "Re-authenticating: Token does not have required scopes")
       end >>= fun () ->
       get_new_access_token (CCList.union ~eq:String.equal token_info.scopes scopes)
     | None -> get_new_access_token scopes
