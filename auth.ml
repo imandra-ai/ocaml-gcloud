@@ -74,7 +74,7 @@ module Cloud_sdk = struct
     Lwt_process.with_process_in ("gcloud", [| "gcloud"; "config"; "get-value"; "core/project" |])
       (fun process_in ->
          let open Lwt.Infix in
-         process_in#status >>= fun status ->
+         process_in#status >>= fun _status ->
          Lwt_io.read process_in#stdout >|= String.trim)
 end
 
@@ -172,7 +172,7 @@ let credentials_of_string (json_str : string)
     |> credentials_of_json
     |> CCResult.pure
   with
-  | Yojson.Basic.Util.Type_error (msg, _) ->
+  | Yojson.Basic.Util.Type_error (_msg, _) ->
     CCResult.fail `Bad_credentials_format
 
 let credentials_of_file (credentials_file : string)
@@ -202,7 +202,7 @@ let access_token_of_response (resp, body : Cohttp.Response.t * Cohttp_lwt.Body.t
         |> access_token_of_json
         |> Lwt.return_ok
       with
-      | Yojson.Basic.Util.Type_error (msg, _) ->
+      | Yojson.Basic.Util.Type_error (_msg, _) ->
         Lwt.return_error `Bad_token_response
     end
   | _ ->
@@ -264,7 +264,7 @@ let access_token_of_credentials (scopes : string list) (credentials : credential
 
 let project_id_of_credentials (credentials : credentials) : string option =
   match credentials with
-  | Service_account { project_id } -> Some project_id
+  | Service_account { project_id; _ } -> Some project_id
   | Authorized_user _
   | GCE_metadata -> None
 
@@ -312,7 +312,7 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
     let ping =
       Lwt.catch
         (fun () ->
-           Compute_engine.Metadata.ping () >>= fun (resp, body) ->
+           Compute_engine.Metadata.ping () >>= fun (resp, _body) ->
            match Cohttp.Response.status resp with
            | `OK when Compute_engine.Metadata.response_has_metadata_header resp ->
              let open Lwt_result.Infix in
@@ -326,7 +326,7 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
            | _ ->
              Lwt.return_error `No_credentials
         )
-        (fun exn -> Lwt.return_error `No_credentials)
+        (fun _exn -> Lwt.return_error `No_credentials)
     in
     let timeout =
       Lwt_unix.sleep Compute_engine.Metadata.metadata_default_timeout >>= fun () ->
