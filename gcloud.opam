@@ -1,0 +1,23 @@
+opam-version: "1.2"
+name: "gcloud"
+version: "0.1"
+maintainer: "Matt Bray <matt@aestheticintegration.com>"
+author: "Matt Bray <matt@aestheticintegration.com>"
+homepage: "https://github.com/aestheticintegration/ocaml-gcloud"
+bug-reports: "https://github.com/aestheticintegration/ocaml-gcloud/issues"
+build: [["jbuilder" "build" "-p" name "-j" jobs]]
+depends: [
+  "jbuilder" {build}
+  "cohttp"
+  "cohttp-lwt-unix"
+  "containers"
+  "cstruct"
+  "jwt"
+  "logs"
+  "lwt"
+  "lwt_ssl"
+  "nocrypto"
+  "ppx_deriving_yojson"
+  "x509"
+  "yojson"
+]
