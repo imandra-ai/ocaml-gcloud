@@ -82,6 +82,7 @@ type error =
   [ `Bad_token_response
   | `Bad_credentials_format
   | `No_credentials
+  | `No_project_id
   | Compute_engine.Metadata.error
   ]
 
@@ -115,7 +116,7 @@ type token_info =
   ; token : access_token
   ; created_at : float
   ; scopes : string list
-  ; project_id : string option
+  ; project_id : string
   }
 
 let token_info_mvar : token_info option Lwt_mvar.t =
@@ -285,7 +286,10 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
       | Some credentials_file ->
         let open Lwt_result.Infix in
         credentials_of_file credentials_file >>= fun credentials ->
-        Lwt_result.return (credentials, discover_project_id credentials)
+        discover_project_id credentials
+        |> CCOpt.to_result `No_project_id
+        |> Lwt.return >>= fun project_id ->
+        Lwt_result.return (credentials, project_id)
     end
 
   | Discover_credentials_json_from_env ->
@@ -295,17 +299,20 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
       | Some json_str ->
         let open Lwt_result.Infix in
         credentials_of_string json_str |> Lwt.return >>= fun credentials ->
-        Lwt_result.return (credentials, discover_project_id credentials)
+        discover_project_id credentials
+        |> CCOpt.to_result `No_project_id
+        |> Lwt.return >>= fun project_id ->
+        Lwt_result.return (credentials, project_id)
     end
 
   | Discover_credentials_from_cloud_sdk_path ->
     let open Lwt_result.Infix in
     credentials_of_file Paths.application_default_credentials >>= fun credentials ->
     begin match discover_project_id credentials with
-    | Some project_id -> Lwt_result.return (credentials, Some project_id)
+    | Some project_id -> Lwt_result.return (credentials, project_id)
     | None ->
       Cloud_sdk.get_project_id () |> Lwt_result.ok >>= fun project_id ->
-      Lwt_result.return (credentials, Some project_id)
+      Lwt_result.return (credentials, project_id)
     end
 
   | Discover_credentials_from_gce_metadata ->
@@ -322,7 +329,7 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
               | Some project_id -> Lwt_result.return project_id
               | None -> Compute_engine.Metadata.get_project_id ()
              ) >>= fun project_id ->
-             Lwt.return_ok (credentials, Some project_id)
+             Lwt.return_ok (credentials, project_id)
            | _ ->
              Lwt.return_error `No_credentials
         )
@@ -344,8 +351,7 @@ let rec first_ok ~(error : 'e) (fs : (unit -> ('a, 'e) result Lwt.t) list) : ('a
       | Error error -> first_ok ~error fs
     end
 
-let discover_credentials () : (credentials * string option, error) Lwt_result.t =
-  let open Lwt.Infix in
+let discover_credentials () : (credentials * string, error) Lwt_result.t =
   [ Discover_credentials_path_from_env
   ; Discover_credentials_json_from_env
   ; Discover_credentials_from_cloud_sdk_path
@@ -359,9 +365,7 @@ let get_access_token ?(scopes : string list = []) () : token_info Lwt.t =
     let open Lwt_result.Infix in
     discover_credentials () >>= fun (credentials, project_id) ->
     access_token_of_credentials scopes credentials >>= fun access_token ->
-    L.info (fun m ->
-        m "Authenticated OK (project: %s)"
-          (project_id |> CCOpt.get_or ~default:"no project"))
+    L.info (fun m -> m "Authenticated OK (project: %s)" project_id)
     |> Lwt_result.ok >|= fun () ->
     { credentials
     ; token = access_token
