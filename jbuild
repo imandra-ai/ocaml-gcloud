@@ -3,7 +3,7 @@
 (library
  ((name gcloud)
   (public_name gcloud)
-  (preprocess (pps (ppx_deriving_yojson)))
+  (preprocess (pps (ppx_deriving.std ppx_deriving_yojson)))
   (libraries
    (lwt
     yojson
