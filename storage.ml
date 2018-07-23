@@ -2,26 +2,10 @@ module Scopes = struct
   let devstorage_read_only = "https://www.googleapis.com/auth/devstorage.read_only"
 end
 
-type error_response_errors_item =
-  { domain : string
-  ; reason : string
-  ; message : string
-  } [@@deriving yojson]
-
-type error_response_error =
-  { errors : error_response_errors_item list
-  } [@@deriving yojson]
-
-type error_response =
-  { error : error_response_error
-  ; code: int
-  ; message: string
-  } [@@deriving yojson]
-
-type gcloud_error = ([`Not_found] * error_response)
+type gcloud_error = ([`Not_found] * Error.error_response)
 
 let string_of_gcloud_error : gcloud_error -> string = function
-  | `Not_found, e -> (Printf.sprintf "Not found: %s" (e |> error_response_to_yojson |> Yojson.Safe.to_string))
+  | `Not_found, e -> (Printf.sprintf "Not found: %s" (e |> Error.error_response_to_yojson |> Yojson.Safe.to_string))
 
 type errors =
   [ `Gcloud_error_resp of gcloud_error
@@ -95,21 +79,23 @@ let get_object (bucket_name : string) (object_path : string) : (string, [> error
     Cohttp_lwt.Body.to_string body |> Lwt_result.ok >>= fun message ->
     (** With alt=media, the API does not return a JSON error object, so we create one ourselves here. *)
     let error_response =
-      { error =
+      Error.{ error =
           { errors =
               [ { domain = "global"
                 ; reason = "notFound"
                 ; message
                 }
               ]
+          ; code = 404
+          ; message
           }
-      ; code = 404
-      ; message
       }
     in
     as_gcloud_error `Not_found error_response
   | x ->
     Lwt_result.fail (`Http_error x)
+
+[@@@warning "-39"]
 
 type listed_object =
   { name : string
@@ -124,6 +110,8 @@ type list_objects_response =
   ; prefixes: string list [@default []]
   ; items : listed_object list
   } [@@deriving yojson]
+
+[@@@warning "+39"]
 
 let list_objects (bucket_name : string) : (list_objects_response, [> errors]) Lwt_result.t =
   let open Lwt_result.Infix in
@@ -160,7 +148,7 @@ let list_objects (bucket_name : string) : (list_objects_response, [> errors]) Lw
 
   | `Not_found ->
     json_parse_err_or_json body
-    >>= json_transform_err_or error_response_of_yojson
+    >>= json_transform_err_or Error.error_response_of_yojson
     >>= (as_gcloud_error `Not_found)
 
   | x ->
