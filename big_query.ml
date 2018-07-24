@@ -4,7 +4,7 @@ end
 
 module Schema = struct
   [@@@warning "-39"]
-  type mode = REQUIRED | NULLABLE
+  type mode = REQUIRED | NULLABLE | REPEATED
   [@@deriving show { with_path = false }]
 
   let mode_to_yojson mode =
@@ -13,6 +13,7 @@ module Schema = struct
   let mode_of_yojson = function
     | `String "REQUIRED" -> Ok REQUIRED
     | `String "NULLABLE" -> Ok NULLABLE
+    | `String "REPEATED" -> Ok REPEATED
     | _ -> Error "mode_of_yojson"
 
   type bq_type =
@@ -22,6 +23,7 @@ module Schema = struct
     | DATE
     | TIME
     | TIMESTAMP
+    | RECORD
   [@@deriving show { with_path = false }]
 
   let bq_type_to_yojson bq_type =
@@ -34,6 +36,7 @@ module Schema = struct
     | `String "DATE" -> Ok DATE
     | `String "TIME" -> Ok TIME
     | `String "TIMESTAMP" -> Ok TIMESTAMP
+    | `String "RECORD" -> Ok RECORD
     | _ -> Error "bq_type_of_yojson"
 
   type field =
@@ -41,6 +44,7 @@ module Schema = struct
     ; description : string option [@default None]
     ; mode : mode
     ; bq_type : bq_type [@key "type"]
+    ; fields : field list [@default []]
     }
   [@@deriving make, yojson]
   [@@@warning "+39"]
