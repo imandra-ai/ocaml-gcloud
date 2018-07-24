@@ -206,7 +206,7 @@ module Jobs = struct
           body_str
           |> Cohttp_lwt.Body.of_string
         in
-        Logs_lwt.debug (fun m -> m "POST %a with %S [%a]" Uri.pp_hum uri body_str Cohttp.Header.pp_hum headers) |> Lwt_result.ok >>= fun () ->
+        Logs_lwt.debug (fun m -> m "Query: %s" q) |> Lwt_result.ok >>= fun () ->
         Cohttp_lwt_unix.Client.post uri ~headers ~body
         |> Lwt_result.ok
       )
@@ -218,12 +218,17 @@ module Jobs = struct
     match Cohttp.Response.status resp with
     | `OK ->
       Cohttp_lwt.Body.to_string body |> Lwt_result.ok >>= fun body_str ->
-      Logs_lwt.debug (fun m -> m "%s" body_str) |> Lwt_result.ok >>= fun () ->
       body_str
       |> Yojson.Safe.from_string
       |> query_response_of_yojson
       |> CCResult.map_err (fun msg -> `Json_transform_error msg)
-      |> Lwt.return
+      |> Lwt.return >>= fun response ->
+      Logs_lwt.debug (fun m ->
+          m "Response: total_bytes_processed=%s cache_hit=%b total_rows=%s"
+            response.totalBytesProcessed response.cacheHit response.totalRows
+        ) |> Lwt_result.ok >>= fun () ->
+      Lwt.return_ok response
+
     | status_code ->
       Error.of_response_status_code_and_body status_code body
 end

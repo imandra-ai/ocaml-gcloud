@@ -4,6 +4,8 @@ type api_error_item =
   { domain : string
   ; reason : string
   ; message : string
+  ; location : string option [@default None]
+  ; locationType : string option [@default None]
   } [@@deriving yojson]
 
 type api_error =
