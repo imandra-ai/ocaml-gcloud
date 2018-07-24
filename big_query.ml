@@ -47,11 +47,10 @@ module Schema = struct
 end
 
 module Datasets = struct
-  let list () =
+  let list () : (string, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
 
     Auth.get_access_token ~scopes:[Scopes.bigquery] ()
-    |> Lwt_result.catch
     |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
 
@@ -78,14 +77,7 @@ module Datasets = struct
     | `OK ->
       Cohttp_lwt.Body.to_string body |> Lwt_result.ok
     | x ->
-      Cohttp_lwt.Body.to_string body |> Lwt_result.ok >>= fun body_str ->
-      body_str
-      |> Yojson.Safe.from_string
-      |> Error.error_response_of_yojson
-      |> CCResult.map_err (fun _msg -> `Http_error (x, body_str))
-      |> Lwt.return
-      >>= fun error ->
-      Lwt_result.fail (`Gcloud_error error)
+      Error.of_response_status_code_and_body x body
 end
 
 module Jobs = struct
@@ -139,7 +131,6 @@ module Jobs = struct
     let open Lwt_result.Infix in
 
     Auth.get_access_token ~scopes:[Scopes.bigquery] ()
-    |> Lwt_result.catch
     |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
 
@@ -182,15 +173,8 @@ module Jobs = struct
       body_str
       |> Yojson.Safe.from_string
       |> query_response_of_yojson
-      |> CCResult.map_err (fun msg -> `Json_decode_error msg)
+      |> CCResult.map_err (fun msg -> `Json_transform_error msg)
       |> Lwt.return
-    | x ->
-      Cohttp_lwt.Body.to_string body |> Lwt_result.ok >>= fun body_str ->
-      body_str
-      |> Yojson.Safe.from_string
-      |> Error.error_response_of_yojson
-      |> CCResult.map_err (fun _msg -> `Http_error (x, body_str))
-      |> Lwt.return
-      >>= fun error ->
-      Lwt_result.fail (`Gcloud_error error)
+    | status_code ->
+      Error.of_response_status_code_and_body status_code body
 end

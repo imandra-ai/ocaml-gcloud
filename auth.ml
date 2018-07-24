@@ -28,6 +28,12 @@ module Compute_engine = struct
     type error =
       [ `Bad_GCE_metadata_response of Cohttp.Code.status_code ]
 
+    let pp_error fmt (error : error) =
+      match error with
+      | `Bad_GCE_metadata_response status_code ->
+        Format.fprintf fmt "GCE metadata API returned unexpected response code: %s"
+          (Cohttp.Code.string_of_status status_code)
+
     let metadata_ip_root =
       let metadata_ip =
         Sys.getenv_opt Environment_vars.gce_metadata_ip
@@ -79,12 +85,26 @@ module Cloud_sdk = struct
 end
 
 type error =
-  [ `Bad_token_response
+  [ `Bad_token_response of string
   | `Bad_credentials_format
   | `No_credentials
   | `No_project_id
   | Compute_engine.Metadata.error
   ]
+
+let pp_error fmt (error : error) =
+  match error with
+  | `Bad_token_response body_str ->
+    Format.fprintf fmt "Unexpected format for access_token: %S" body_str
+  | `Bad_credentials_format ->
+    Format.fprintf fmt "Unexpected format for credentials"
+  | `No_credentials ->
+    Format.fprintf fmt "Could not discover credentials"
+  | `No_project_id ->
+    Format.fprintf fmt "Could not discover the project ID (try setting %s)"
+      Environment_vars.google_project_id
+  | #Compute_engine.Metadata.error as e ->
+    Compute_engine.Metadata.pp_error fmt e
 
 exception Error of error
 
@@ -192,7 +212,7 @@ let credentials_of_file (credentials_file : string)
          |> Lwt.return
       )
 
-let access_token_of_response (resp, body : Cohttp.Response.t * Cohttp_lwt.Body.t) : (access_token, [>`Bad_token_response]) result Lwt.t =
+let access_token_of_response (resp, body : Cohttp.Response.t * Cohttp_lwt.Body.t) : (access_token, [>`Bad_token_response of string]) result Lwt.t =
   let open Lwt.Infix in
   match Cohttp.Response.status resp with
   | `OK -> begin
@@ -204,15 +224,15 @@ let access_token_of_response (resp, body : Cohttp.Response.t * Cohttp_lwt.Body.t
         |> Lwt.return_ok
       with
       | Yojson.Basic.Util.Type_error (_msg, _) ->
-        Lwt.return_error `Bad_token_response
+        Lwt.return_error (`Bad_token_response body_str)
     end
   | _ ->
     Cohttp_lwt.Body.to_string body >>= fun body_str ->
     L.err (fun m -> m "response: %s" body_str) >>= fun () ->
-    Lwt.return_error `Bad_token_response
+    Lwt.return_error (`Bad_token_response body_str)
 
 let access_token_of_credentials (scopes : string list) (credentials : credentials)
-  : (access_token, [> `Bad_token_response ]) result Lwt.t =
+  : (access_token, [> `Bad_token_response of string ]) result Lwt.t =
   let open Lwt.Infix in
   let request =
     match credentials with
@@ -360,7 +380,7 @@ let discover_credentials () : (credentials * string, error) Lwt_result.t =
   |> List.map (fun discovery_mode -> fun () -> discover_credentials_with discovery_mode)
   |> first_ok ~error:`No_credentials
 
-let get_access_token ?(scopes : string list = []) () : token_info Lwt.t =
+let get_access_token ?(scopes : string list = []) () : (token_info, error) Lwt_result.t =
   let get_new_access_token scopes =
     let open Lwt_result.Infix in
     discover_credentials () >>= fun (credentials, project_id) ->
@@ -390,11 +410,9 @@ let get_access_token ?(scopes : string list = []) () : token_info Lwt.t =
     | None -> get_new_access_token scopes
   end >>= fun token_info_result ->
   Lwt_mvar.put token_info_mvar (CCResult.to_opt token_info_result) >>= fun () ->
-  match token_info_result with
-  | Ok token_info -> Lwt.return token_info
-  | Error error -> Lwt.fail (Error error)
+  Lwt.return token_info_result
 
 let get_project_id (scopes : string list) =
-  let open Lwt.Infix in
+  let open Lwt_result.Infix in
   get_access_token ~scopes () >>= fun token_info ->
-  Lwt.return token_info.project_id
+  Lwt.return_ok token_info.project_id
