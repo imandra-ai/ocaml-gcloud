@@ -89,11 +89,47 @@ module Jobs = struct
     }
   [@@deriving yojson]
 
+  type query_parameter_type =
+    { type_ : Schema.bq_type [@key "type"]
+    }
+  [@@deriving yojson]
+
+  type query_parameter_value =
+    { value : string
+    }
+  [@@deriving yojson]
+
+  type query_parameter =
+    { name : string
+    ; parameterType : query_parameter_type
+    ; parameterValue : query_parameter_value
+    }
+  [@@deriving yojson]
+
+  let param ~name ~type_ ~value =
+    { name
+    ; parameterType = { type_ }
+    ; parameterValue = { value }
+    }
+
+  type parameter_mode = POSITIONAL | NAMED
+  [@@deriving show { with_path = false }]
+
+  let parameter_mode_to_yojson m =
+    `String (show_parameter_mode m)
+
+  let parameter_mode_of_yojson = function
+    | `String "POSITIONAL" -> Ok POSITIONAL
+    | `String "NAMED" -> Ok NAMED
+    | _ -> Error "parameter_mode_of_yojson"
+
   type query_request =
     { kind : string
     ; query : string
     ; useLegacySql : bool
     ; location : string
+    ; queryParameters : query_parameter list
+    ; parameterMode : parameter_mode option
     }
   [@@deriving yojson]
 
@@ -123,9 +159,22 @@ module Jobs = struct
   [@@deriving yojson { strict = false }]
   [@@@warning "+39"]
 
-  let query ?project_id q =
+  let query ?project_id ?(use_legacy_sql=false) ?(params = []) q : (query_response, [> Error.t ]) Lwt_result.t =
+    let parameter_mode =
+      if use_legacy_sql || params = [] then
+        None
+      else
+        Some NAMED
+    in
+
     let request =
-      { kind = "bigquery#queryRequest"; query = q; useLegacySql = false; location = "EU" }
+      { kind = "bigquery#queryRequest"
+      ; query = q
+      ; useLegacySql = use_legacy_sql
+      ; location = "EU"
+      ; parameterMode = parameter_mode
+      ; queryParameters = params
+      }
     in
 
     let open Lwt_result.Infix in
