@@ -12,6 +12,7 @@ depends: [
   "cohttp-lwt-unix"
   "containers"
   "cstruct"
+  "cstruct-lwt"
   "jwt"
   "logs"
   "lwt"
