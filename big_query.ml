@@ -163,6 +163,45 @@ module Jobs = struct
   [@@deriving yojson { strict = false }]
   [@@@warning "+39"]
 
+  let map_result_l_i f xs =
+    let rec go i = function
+      | x :: xs ->
+        begin match f i x with
+          | Ok y -> begin match go (i+1) xs with
+              | Ok ys -> Ok (y :: ys)
+              | Error e -> Error e
+            end
+          | Error e -> Error e
+        end
+      | [] -> Ok []
+    in
+    go 0 xs
+
+  let single_row (f : query_response_row -> ('a, string) result) (response : query_response) : ('a, string) result =
+    match response.rows with
+    | [row] ->
+      f row
+      |> CCResult.map_err (fun msg -> Printf.sprintf "While decoding a single_row: %s" msg)
+    | _ -> Error (Printf.sprintf "Expected a single row, but got %d rows" (List.length response.rows))
+
+  let many_rows (f : query_response_row -> ('a, string) result) (response : query_response) : ('a list, string) result =
+    response.rows
+    |> map_result_l_i (fun i row ->
+        f row
+        |> CCResult.map_err (fun msg -> Printf.sprintf "While decoding row %d: %s" i msg))
+
+  let single_field (f : string -> ('a, string) result) (row : query_response_row) : ('a, string) result =
+    match row.f with
+    | [field] -> f field.v
+      |> CCResult.map_err (fun msg -> Printf.sprintf "While decoding a single_field: %s" msg)
+    | _ -> Error (Printf.sprintf "Expected row with a single field, but got %d fields" (List.length row.f))
+
+  let int str =
+    CCInt.of_string str
+    |> CCOpt.to_result (Printf.sprintf "Expected an int, but got: %S" str)
+
+  let string (str : string) = Ok str
+
   let query ?project_id ?(use_legacy_sql=false) ?(params = []) q : (query_response, [> Error.t ]) Lwt_result.t =
     let parameter_mode =
       if use_legacy_sql || params = [] then
@@ -222,6 +261,7 @@ module Jobs = struct
     match Cohttp.Response.status resp with
     | `OK ->
       Cohttp_lwt.Body.to_string body |> Lwt_result.ok >>= fun body_str ->
+      (* Logs_lwt.debug (fun m -> m "%s" body_str) |> Lwt_result.ok >>= fun () -> *)
       body_str
       |> Yojson.Safe.from_string
       |> query_response_of_yojson
