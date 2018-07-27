@@ -5,9 +5,9 @@ maintainer: "Matt Bray <matt@aestheticintegration.com>"
 author: "Matt Bray <matt@aestheticintegration.com>"
 homepage: "https://github.com/aestheticintegration/ocaml-gcloud"
 bug-reports: "https://github.com/aestheticintegration/ocaml-gcloud/issues"
-build: [["jbuilder" "build" "-p" name "-j" jobs]]
+build: [["dune" "build" "-p" name "-j" jobs]]
 depends: [
-  "jbuilder" {build}
+  "dune" {build}
   "cohttp"
   "cohttp-lwt-unix"
   "containers"

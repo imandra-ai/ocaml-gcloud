@@ -1,0 +1,16 @@
+(library
+ (name gcloud)
+ (public_name gcloud)
+ (preprocess (pps ppx_deriving.std ppx_deriving_yojson))
+ (libraries cohttp
+            cohttp.lwt
+            containers
+            cstruct
+            jwt
+            logs
+            logs.lwt
+            nocrypto.lwt
+            ppx_deriving_yojson.runtime
+            x509
+            yojson
+            lwt))
