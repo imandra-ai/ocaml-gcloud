@@ -17,6 +17,7 @@ module Schema = struct
     | _ -> Error "mode_of_yojson"
 
   type bq_type =
+    | BOOL
     | INTEGER
     | NUMERIC
     | STRING
@@ -30,6 +31,7 @@ module Schema = struct
     `String (show_bq_type bq_type)
 
   let bq_type_of_yojson = function
+    | `String "BOOL" -> Ok BOOL
     | `String "INTEGER" -> Ok INTEGER
     | `String "NUMERIC" -> Ok NUMERIC
     | `String "STRING" -> Ok STRING
@@ -152,7 +154,7 @@ module Jobs = struct
   type query_response =
     { kind : string
     ; schema : query_response_schema
-    ; rows : query_response_row list
+    ; rows : query_response_row list [@default []]
     ; pageToken : string option [@default None]
     ; totalRows : string
     ; jobReference : job_reference
