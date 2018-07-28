@@ -2,20 +2,6 @@ module Scopes = struct
   let devstorage_read_only = "https://www.googleapis.com/auth/devstorage.read_only"
 end
 
-let json_parse_err_or_json (body : Cohttp_lwt.Body.t) : (Yojson.Safe.json, [> Error.t ]) Lwt_result.t =
-  let open Lwt.Infix in
-  Lwt_result.catch
-    (Cohttp_lwt.Body.to_string body >|= Yojson.Safe.from_string)
-  |> Lwt_result.map_err (function
-      | Yojson.Json_error msg -> `Json_parse_error msg
-      | exn -> `Network_error exn
-    )
-
-let json_transform_err_or (transform : Yojson.Safe.json -> ('a, string) result) (json : Yojson.Safe.json)
-  : ('a, Error.t) Lwt_result.t =
-  Lwt_result.lift (transform json)
-  |> Lwt_result.map_err (fun e -> `Json_transform_error e)
-
 let get_object (bucket_name : string) (object_path : string) : (string, [> Error.t ]) Lwt_result.t =
   let open Lwt_result.Infix in
 
@@ -90,8 +76,6 @@ let list_objects (bucket_name : string) : (list_objects_response, [> Error.t ]) 
   >>= fun (resp, body) ->
   match Cohttp.Response.status resp with
   | `OK ->
-    json_parse_err_or_json body
-    >>= json_transform_err_or list_objects_response_of_yojson
-
+    Error.parse_body_json list_objects_response_of_yojson body
   | status_code ->
     Error.of_response_status_code_and_body status_code body

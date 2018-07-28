@@ -262,18 +262,12 @@ module Jobs = struct
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
     | `OK ->
-      Cohttp_lwt.Body.to_string body |> Lwt_result.ok >>= fun body_str ->
-      (* Logs_lwt.debug (fun m -> m "%s" body_str) |> Lwt_result.ok >>= fun () -> *)
-      body_str
-      |> Yojson.Safe.from_string
-      |> query_response_of_yojson
-      |> CCResult.map_err (fun msg -> `Json_transform_error msg)
-      |> Lwt.return >>= fun response ->
+      Error.parse_body_json query_response_of_yojson body >>= fun response ->
       Logs_lwt.debug (fun m ->
           m "Response: total_bytes_processed=%s cache_hit=%b total_rows=%s"
             response.totalBytesProcessed response.cacheHit response.totalRows
         ) |> Lwt_result.ok >>= fun () ->
-      Lwt.return_ok response
+      Lwt_result.return response
 
     | status_code ->
       Error.of_response_status_code_and_body status_code body
