@@ -12,10 +12,10 @@ type service_context =
 type http_request_context =
   { method_ : string [@key "method"]
   ; url : string
-  ; user_agent: string [@key "userAgent"]
-  ; referrer: string
-  ; response_status_code: int [@key "responseStatusCode"]
-  ; remote_ip: string [@key "remoteIp"]
+  ; user_agent: string option [@key "userAgent"] [@default None]
+  ; referrer: string option [@default None]
+  ; response_status_code: int option [@key "responseStatusCode"] [@default None]
+  ; remote_ip: string option [@key "remoteIp"] [@default None]
   } [@@deriving yojson]
 
 type source_location =
