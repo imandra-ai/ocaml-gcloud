@@ -7,6 +7,7 @@ homepage: "https://github.com/aestheticintegration/ocaml-gcloud"
 bug-reports: "https://github.com/aestheticintegration/ocaml-gcloud/issues"
 build: [["dune" "build" "-p" name "-j" jobs]]
 depends: [
+  "alcotest" {test}
   "dune" {build}
   "cohttp"
   "cohttp-lwt-unix"
