@@ -1,4 +1,5 @@
 (executable
  (name test_main)
  (modules test_main)
+ (preprocess (pps ppx_here))
  (libraries alcotest gcloud))

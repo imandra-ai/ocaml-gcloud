@@ -4,39 +4,15 @@ let stackdriver_errors_tests : unit Alcotest.test_case list =
   , (fun () ->
        let runner () =
 
-         (* Needs OCAMLRUNPARAM=b *)
-         let open Printexc in
-         let raw_bt = Printexc.get_raw_backtrace () in
-         let slot =
-           Printexc.backtrace_slots raw_bt
-           |> CCOpt.flat_map (fun s ->
-               if Array.length s > 0 then
-                 Some s.(0)
-               else
-                 None)
-         in
-         let formatted = Printexc.raw_backtrace_to_string raw_bt in
-
+         (* https://cloud.google.com/error-reporting/docs/formatting-error-messages *)
          Gcloud.Stackdriver_errors.report
-           { event_time = None (* Some "" *) (* (Ptime_clock.now ()) *)
-           ; message =
-               (Printf.sprintf "Error: gcloud error report test message\n\r%s" formatted)
+           { event_time = None
+           ; message = (Gcloud.Stackdriver_errors.stackdriver_nodejs_format ~pos:[%here] "Error" "gcloud error report test message")
            ; context = Some
                  { http_request = None
                  ; user = None
                  ; source_references = []
-                 ; report_location =
-                     match (slot |> CCOpt.flat_map Printexc.Slot.location) with
-                     | None ->
-                       { file_path = "<unknown>"
-                       ; line_number = 0
-                       ; function_name = "<unknown>"
-                       }
-                     | Some l ->
-                       { file_path = l.filename
-                       ; line_number = l.line_number
-                       ; function_name = (Printf.sprintf "%d:%d" l.start_char l.end_char)
-                       }
+                 ; report_location = None
                  }
            ; service_context =
                { service = "ocaml-gcloud test suite"

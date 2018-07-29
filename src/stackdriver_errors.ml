@@ -32,7 +32,8 @@ type source_reference =
 type error_context =
   { http_request : http_request_context option [@key "httpRequest"] [@default None]
   ; user : string option [@default None]
-  ; report_location : source_location [@key "reportLocation"]
+  (* Must be set if no stackdriver-parseable stack trace in report_request.message *)
+  ; report_location : source_location option [@key "reportLocation"] [@default None]
   ; source_references : source_reference list [@key "sourceReferences"]
   } [@@deriving yojson]
 
@@ -74,3 +75,12 @@ let report (report_request : report_request) : (unit, [> Error.t]) Lwt_result.t 
        | _ -> (Error.of_response_status_code_and_body status body)
     )
     (fun e -> Lwt_result.fail (`Network_error e))
+
+let stackdriver_nodejs_format ?pos:(pos_opt : Lexing.position option) (type_ : string) (msg : string) =
+  (* Format ocaml backtrace in 'nodejs format' so stackdriver notices it *)
+  (* Preferring this to reportLocation as it is much more viewable in the stackdriver error UI *)
+  let open Lexing in
+  let base = (Printf.sprintf "%s: %s" type_ msg) in
+  match pos_opt with
+  | None -> base
+  | Some pos -> (Printf.sprintf "%s\n\tat <anonymous> (%s:%d:%d)" base pos.pos_fname pos.pos_lnum pos.pos_cnum)
