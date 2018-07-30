@@ -251,7 +251,10 @@ module Jobs = struct
           body_str
           |> Cohttp_lwt.Body.of_string
         in
-        Logs_lwt.debug (fun m -> m "Query: %s" q) |> Lwt_result.ok >>= fun () ->
+        Logs_lwt.debug (fun m ->
+            m "Query: %s"
+              (if String.length q > 80 then CCString.sub q 0 80 ^ "..." else q))
+        |> Lwt_result.ok >>= fun () ->
         Cohttp_lwt_unix.Client.post uri ~headers ~body
         |> Lwt_result.ok
       )
