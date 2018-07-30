@@ -65,5 +65,9 @@ let parse_body_json (transform : Yojson.Safe.json -> ('a, string) result) (body 
 
 let of_response_status_code_and_body (status_code : Cohttp.Code.status_code) (body : Cohttp_lwt.Body.t) : ('a, [> t]) Lwt_result.t =
   let open Lwt_result.Infix in
-  parse_body_json api_error_response_of_yojson body >>= fun error ->
-  Lwt_result.fail (`Gcloud_api_error (status_code, Some error))
+  Lwt.Infix.(
+    parse_body_json api_error_response_of_yojson body >|= function
+    | Ok error -> Ok (Some error)
+    | Error _ -> Ok None
+  ) >>= fun error_opt ->
+  Lwt_result.fail (`Gcloud_api_error (status_code, error_opt))
