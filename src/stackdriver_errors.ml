@@ -82,4 +82,4 @@ let stackdriver_nodejs_format ?pos:(pos_opt : Lexing.position option) (msg : str
   let open Lexing in
   match pos_opt with
   | None -> msg
-  | Some pos -> (Printf.sprintf "%s\n\tat <anonymous> (%s:%d:%d)" msg pos.pos_fname pos.pos_lnum pos.pos_cnum)
+  | Some pos -> (Printf.sprintf "%s\n\tat <anonymous> (%s:%d:%d)" msg pos.pos_fname pos.pos_lnum (pos.pos_cnum - pos.pos_bol))
