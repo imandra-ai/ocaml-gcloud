@@ -76,11 +76,10 @@ let report (report_request : report_request) : (unit, [> Error.t]) Lwt_result.t 
     )
     (fun e -> Lwt_result.fail (`Network_error e))
 
-let stackdriver_nodejs_format ?pos:(pos_opt : Lexing.position option) (type_ : string) (msg : string) =
+let stackdriver_nodejs_format ?pos:(pos_opt : Lexing.position option) (msg : string) =
   (* Format ocaml backtrace in 'nodejs format' so stackdriver notices it *)
   (* Preferring this to reportLocation as it is much more viewable in the stackdriver error UI *)
   let open Lexing in
-  let base = (Printf.sprintf "%s: %s" type_ msg) in
   match pos_opt with
-  | None -> base
-  | Some pos -> (Printf.sprintf "%s\n\tat <anonymous> (%s:%d:%d)" base pos.pos_fname pos.pos_lnum pos.pos_cnum)
+  | None -> msg
+  | Some pos -> (Printf.sprintf "%s\n\tat <anonymous> (%s:%d:%d)" msg pos.pos_fname pos.pos_lnum pos.pos_cnum)
