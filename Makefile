@@ -2,6 +2,10 @@
 build:
 	dune build
 
+.PHONY: test
+test:
+	dune exec test/test_main.exe
+
 .PHONY: clean
 clean:
 	dune clean
