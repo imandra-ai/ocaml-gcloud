@@ -257,7 +257,7 @@ let access_token_of_credentials (scopes : string list) (credentials : credential
       in
       Nocrypto_entropy_lwt.initialize () >>= fun () ->
       let now = Unix.time () in
-      let header = Jwt.(header_of_algorithm_and_typ (RS256 (match key with | `RSA k -> k)) (Some "JWT")) in
+      let header = Jwt.(header_of_algorithm_and_typ (RS256 (match key with | `RSA k -> Some k)) (Some "JWT")) in
       let payload =
         Jwt.empty_payload
         |> Jwt.add_claim Jwt.iss c.client_email

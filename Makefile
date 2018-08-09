@@ -22,7 +22,7 @@ opam-pins:
 	opam pin add -y --no-action nocrypto --dev-repo
 
 	@echo 'Pin JWT for RSA256 support'
-	opam pin add -y --no-action jwt https://github.com/AestheticIntegration/ocaml-jwt.git#rsa256
+	opam pin add -y --no-action jwt https://github.com/AestheticIntegration/ocaml-jwt.git#rsa256-verification
 
 	@echo
 	@echo "You may need to run \`opam upgrade\` if you've updated these."
