@@ -8,6 +8,7 @@ bug-reports: "https://github.com/aestheticintegration/ocaml-gcloud/issues"
 build: [["dune" "build" "-p" name "-j" jobs]]
 depends: [
   "alcotest" {test}
+  "alcotest-lwt" {test}
   "dune" {build}
   "cohttp"
   "cohttp-lwt-unix"

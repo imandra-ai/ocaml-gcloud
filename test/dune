@@ -2,4 +2,10 @@
  (name test_main)
  (modules test_main)
  (preprocess (pps ppx_here))
- (libraries alcotest gcloud))
+ (libraries alcotest alcotest-lwt gcloud_tests))
+
+(library
+ (name gcloud_tests)
+ (preprocess (pps ppx_here))
+ (modules (:standard \ test_main))
+ (libraries alcotest alcotest-lwt gcloud))
