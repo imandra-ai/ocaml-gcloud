@@ -87,13 +87,6 @@ module Datasets = struct
 end
 
 module Jobs = struct
-  [@@@warning "-39"]
-  type job_reference =
-    { jobId : string
-    ; projectId : string
-    ; location : string
-    }
-  [@@deriving yojson]
 
   module Param = struct
 
@@ -172,7 +165,7 @@ module Jobs = struct
                  (fun p -> [ ( "arrayType", param'_type_to_yojson p ) ])
              ])
 
-    let rec param_type_to_yojson : param -> Yojson.Safe.json =
+    let param_type_to_yojson : param -> Yojson.Safe.json =
       function
       | P param' -> param'_type_to_yojson param'
 
@@ -208,7 +201,7 @@ module Jobs = struct
           [ ( "arrayValues", `List (CCList.map param'_value_to_yojson array_field_params) )
           ]
 
-    let rec param_value_to_yojson : param -> Yojson.Safe.json =
+    let param_value_to_yojson : param -> Yojson.Safe.json =
       function
       | P param' -> param'_value_to_yojson param'
 
@@ -228,12 +221,13 @@ module Jobs = struct
         ]
   end
 
-  type parameter_mode = POSITIONAL | NAMED
+  type parameter_mode = (* POSITIONAL | *) NAMED
   [@@deriving show { with_path = false }]
 
   let parameter_mode_to_yojson m =
     `String (show_parameter_mode m)
 
+  [@@@warning "-39"]
   type query_request =
     { kind : string
     ; query : string
@@ -243,6 +237,13 @@ module Jobs = struct
     ; parameterMode : parameter_mode option
     }
   [@@deriving to_yojson]
+
+  type job_reference =
+    { jobId : string
+    ; projectId : string
+    ; location : string
+    }
+  [@@deriving yojson]
 
   type query_response_schema =
     { fields : Schema.field list}
