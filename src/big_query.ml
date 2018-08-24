@@ -95,28 +95,138 @@ module Jobs = struct
     }
   [@@deriving yojson]
 
-  type query_parameter_type =
-    { type_ : Schema.bq_type [@key "type"]
-    }
-  [@@deriving yojson]
+  module Param = struct
 
-  type query_parameter_value =
-    { value : string
-    }
-  [@@deriving yojson]
+    type numeric
+    type date
+    type time
+    type timestamp
 
-  type query_parameter =
-    { name : string
-    ; parameterType : query_parameter_type
-    ; parameterValue : query_parameter_value
-    }
-  [@@deriving yojson]
+    type 'a struct_param =
+      | FIELD : (string * 'a param') * 'b struct_param -> ( 'a * 'b ) struct_param
+      | EMPTY : unit struct_param
 
-  let param ~name ~type_ ~value =
-    { name
-    ; parameterType = { type_ }
-    ; parameterValue = { value }
-    }
+    and _ param' =
+      | P_BOOL : bool -> bool param'
+      | P_INTEGER : int -> int param'
+      | P_NUMERIC : string -> numeric param'
+      | P_STRING : string -> string param'
+      | P_DATE : string -> date param'
+      | P_TIME : string -> time param'
+      | P_TIMESTAMP : string -> timestamp param'
+      | P_STRUCT : 'a struct_param -> 'a param'
+      | P_ARRAY : 'a param' list -> 'a param'
+
+    type param =
+      | P : 'a param' -> param
+
+    let bool s = P_BOOL s
+    let integer s = P_INTEGER s
+    let numeric s = P_NUMERIC s
+    let string s = P_STRING s
+    let date s = P_DATE s
+    let time s = P_TIME s
+    let timestamp s = P_TIMESTAMP s
+    let array f xs = P_ARRAY (CCList.map f xs)
+
+    let struct_ s = P_STRUCT s
+    let empty_struct = EMPTY
+    let with_field ~name type_ struct_ =
+      FIELD ((name, type_), struct_)
+
+    let rec struct_param_type_to_yojson : type a. a struct_param -> Yojson.Safe.json =
+      fun struct_param ->
+        let rec go : type a. a struct_param -> Yojson.Safe.json list =
+          function
+          | EMPTY -> []
+          | FIELD ((name, param'), struct_param') ->
+            (`Assoc
+               [ ( "name", `String name )
+               ; ( "type", param'_type_to_yojson param' )
+               ]) :: go struct_param'
+        in
+        `Assoc
+          [ ( "type", `String "STRUCT" )
+          ; ( "structTypes", `List (go struct_param) )
+          ]
+
+    and param'_type_to_yojson : type a. a param' -> Yojson.Safe.json =
+      let scalar_json value =
+        `Assoc
+          [ ( "type", value )]
+      in
+      function
+      | P_BOOL _ -> scalar_json (Schema.bq_type_to_yojson Schema.BOOL)
+      | P_INTEGER _ -> scalar_json (Schema.bq_type_to_yojson Schema.INTEGER)
+      | P_NUMERIC _ -> scalar_json (Schema.bq_type_to_yojson Schema.NUMERIC)
+      | P_STRING _ -> scalar_json (Schema.bq_type_to_yojson Schema.STRING)
+      | P_DATE _ -> scalar_json (Schema.bq_type_to_yojson Schema.DATE)
+      | P_TIME _ -> scalar_json (Schema.bq_type_to_yojson Schema.TIME)
+      | P_TIMESTAMP _ -> scalar_json (Schema.bq_type_to_yojson Schema.TIMESTAMP)
+      | P_STRUCT struct_param -> struct_param_type_to_yojson struct_param
+      | P_ARRAY array_field_params ->
+        `Assoc
+          (List.concat
+             [ [ ( "type", `String "ARRAY" ) ]
+             ; array_field_params |> CCList.head_opt |> CCOpt.map_or ~default:[]
+                 (fun p -> [ ( "arrayType", param'_type_to_yojson p ) ])
+             ])
+
+    let rec param_type_to_yojson : param -> Yojson.Safe.json =
+      function
+      | P param' -> param'_type_to_yojson param'
+
+    let rec struct_param_value_to_yojson : type a. a struct_param -> Yojson.Safe.json =
+      fun struct_param ->
+        let rec go : type a. a struct_param -> Yojson.Safe.json list =
+          function
+          | EMPTY -> []
+          | FIELD ((name, param'), struct_param') ->
+            (`Assoc
+               [ ( "name", `String name )
+               ; ( "type", param'_type_to_yojson param' )
+               ]) :: go struct_param'
+        in
+        `Assoc
+          [ ( "type", `String "STRUCT" )
+          ; ( "structTypes", `List (go struct_param) )
+          ]
+
+    and param'_value_to_yojson : type a. a param' -> Yojson.Safe.json =
+      let scalar_json value = `Assoc [ ( "value", value )] in
+      function
+      | P_BOOL b -> scalar_json (`Bool b)
+      | P_INTEGER i -> scalar_json (`Int i)
+      | P_NUMERIC s -> scalar_json (`String s)
+      | P_STRING s -> scalar_json (`String s)
+      | P_DATE d -> scalar_json (`String d)
+      | P_TIME d -> scalar_json (`String d)
+      | P_TIMESTAMP d -> scalar_json (`String d)
+      | P_STRUCT struct_param -> struct_param_value_to_yojson struct_param
+      | P_ARRAY array_field_params ->
+        `Assoc
+          [ ( "arrayValues", `List (CCList.map param'_value_to_yojson array_field_params) )
+          ]
+
+    let rec param_value_to_yojson : param -> Yojson.Safe.json =
+      function
+      | P param' -> param'_value_to_yojson param'
+
+    type query_parameter =
+      { name : string
+      ; type_ : param
+      }
+
+    let make ~name type_ =
+      { name ; type_ = P type_ }
+
+    let query_parameter_to_yojson query_parameter =
+      `Assoc
+        [ ( "name", `String query_parameter.name )
+        ; ( "parameterType", param_type_to_yojson query_parameter.type_ )
+        ; ( "parameterValue", param_value_to_yojson query_parameter.type_ )
+        ]
+  end
 
   type parameter_mode = POSITIONAL | NAMED
   [@@deriving show { with_path = false }]
@@ -124,20 +234,15 @@ module Jobs = struct
   let parameter_mode_to_yojson m =
     `String (show_parameter_mode m)
 
-  let parameter_mode_of_yojson = function
-    | `String "POSITIONAL" -> Ok POSITIONAL
-    | `String "NAMED" -> Ok NAMED
-    | _ -> Error "parameter_mode_of_yojson"
-
   type query_request =
     { kind : string
     ; query : string
     ; useLegacySql : bool
     ; location : string
-    ; queryParameters : query_parameter list
+    ; queryParameters : Param.query_parameter list
     ; parameterMode : parameter_mode option
     }
-  [@@deriving yojson]
+  [@@deriving to_yojson]
 
   type query_response_schema =
     { fields : Schema.field list}
@@ -253,7 +358,7 @@ module Jobs = struct
         in
         Logs_lwt.debug (fun m ->
             m "Query: %s"
-              (if String.length q > 80 then CCString.sub q 0 80 ^ "..." else q))
+              (if String.length q > 1000 then CCString.sub q 0 1000 ^ "..." else q))
         |> Lwt_result.ok >>= fun () ->
         Cohttp_lwt_unix.Client.post uri ~headers ~body
         |> Lwt_result.ok
