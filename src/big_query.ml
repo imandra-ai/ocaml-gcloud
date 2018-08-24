@@ -171,18 +171,16 @@ module Jobs = struct
 
     let rec struct_param_value_to_yojson : type a. a struct_param -> Yojson.Safe.json =
       fun struct_param ->
-        let rec go : type a. a struct_param -> Yojson.Safe.json list =
+        let rec go : type a. a struct_param -> (string * Yojson.Safe.json) list =
           function
           | EMPTY -> []
           | FIELD ((name, param'), struct_param') ->
-            (`Assoc
-               [ ( "name", `String name )
-               ; ( "type", param'_type_to_yojson param' )
-               ]) :: go struct_param'
+            ( name, param'_value_to_yojson param' ) :: go struct_param'
         in
         `Assoc
-          [ ( "type", `String "STRUCT" )
-          ; ( "structTypes", `List (go struct_param) )
+          [ ( "structValues"
+            , `Assoc (go struct_param)
+            )
           ]
 
     and param'_value_to_yojson : type a. a param' -> Yojson.Safe.json =
