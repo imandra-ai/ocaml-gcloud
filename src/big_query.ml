@@ -229,16 +229,16 @@ module Jobs = struct
   type query_request =
     { kind : string
     ; query : string
-    ; useLegacySql : bool
+    ; use_legacy_sql : bool [@key "useLegacySql"]
     ; location : string
-    ; queryParameters : Param.query_parameter list
-    ; parameterMode : parameter_mode option
+    ; query_parameters : Param.query_parameter list [@key "queryParameters"]
+    ; parameter_mode : parameter_mode option [@key "parameterMode"]
     }
   [@@deriving to_yojson]
 
   type job_reference =
-    { jobId : string
-    ; projectId : string
+    { job_id : string [@key "jobId"]
+    ; project_id : string [@key "projectId"]
     ; location : string
     }
   [@@deriving yojson]
@@ -255,19 +255,101 @@ module Jobs = struct
     { f : query_response_field list}
   [@@deriving yojson]
 
+  type query_response_data =
+    { schema : query_response_schema
+    ; rows : query_response_row list
+    ; page_token : string option [@key "pageToken"] [@default None]
+    ; total_rows : string [@key "totalRows"]
+    ; total_bytes_processed : string [@key "totalBytesProcessed"]
+    ; cache_hit : bool [@key "cacheHit"]
+    }
+  [@@deriving of_yojson { strict = false }]
+
+  type query_response' =
+    { kind : string
+    ; job_reference : job_reference [@key "jobReference"]
+    ; job_complete : bool [@key "jobComplete"]
+    }
+  [@@deriving of_yojson { strict = false }]
+  [@@@warning "+39"]
+
   type query_response =
     { kind : string
-    ; schema : query_response_schema
-    ; rows : query_response_row list [@default []]
-    ; pageToken : string option [@default None]
-    ; totalRows : string
-    ; jobReference : job_reference
-    ; jobComplete : bool
-    ; totalBytesProcessed : string
-    ; cacheHit : bool
+    ; job_reference : job_reference
+    ; job_complete : query_response_data option
     }
-  [@@deriving yojson { strict = false }]
-  [@@@warning "+39"]
+
+  let query_response_of_yojson (json : Yojson.Safe.json) : (query_response, string) result =
+    CCResult.(
+      query_response'_of_yojson json >>= fun query_response' ->
+      let query_response =
+        { kind = query_response'.kind
+        ; job_reference = query_response'.job_reference
+        ; job_complete = None
+        }
+      in
+      if query_response'.job_complete then
+        query_response_data_of_yojson json >>= fun data ->
+        return
+          { query_response with
+            job_complete = Some data
+          }
+      else
+        return query_response
+    )
+
+  let query_response_data_to_yojsons (data : query_response_data) : (string * Yojson.Safe.json) list =
+    List.concat
+      [ [ ( "schema", query_response_schema_to_yojson data.schema )
+        ; ( "rows", `List (List.map query_response_row_to_yojson data.rows) )
+        ; ( "totalRows", `String data.total_rows )
+        ; ( "totalBytesProcessed", `String data.total_bytes_processed )
+        ; ( "cacheHit", `Bool data.cache_hit )
+        ]
+      ; data.page_token |> CCOpt.map_or ~default:[]
+          (fun t -> [ ( "pageToken", `String t ) ])
+      ]
+
+  let query_response_to_yojson (query_response : query_response) : Yojson.Safe.json =
+    `Assoc
+      (List.concat
+         [ [ ( "kind", `String query_response.kind )
+           ; ( "jobReference", job_reference_to_yojson query_response.job_reference )
+           ]
+         ; (match query_response.job_complete with
+            | None ->
+              [ ( "jobComplete", `Bool false ) ]
+            | Some data ->
+              ( "jobComplete", `Bool true ) :: query_response_data_to_yojsons data
+           )
+         ])
+
+  let pp_query_response fmt (query_response : query_response) =
+    match query_response.job_complete with
+    | None ->
+      Format.fprintf fmt "Response: job_id=%s job_complete=false" query_response.job_reference.job_id
+    | Some data ->
+      Format.fprintf fmt "Response: job_id=%s total_bytes_processed=%s cache_hit=%b total_rows=%s"
+        query_response.job_reference.job_id
+        data.total_bytes_processed
+        data.cache_hit
+        data.total_rows
+
+  type query_response_complete =
+    { kind : string
+    ; job_reference : job_reference
+    ; data : query_response_data
+    }
+
+  let query_response_complete_to_yojson (query_response_complete : query_response_complete) : Yojson.Safe.json =
+    `Assoc
+      (List.concat
+         [ [ ( "kind", `String query_response_complete.kind )
+           ; ( "jobReference", job_reference_to_yojson query_response_complete.job_reference )
+           ; ( "jobComplete", `Bool false )
+           ]
+         ; query_response_data_to_yojsons query_response_complete.data
+         ])
 
   let map_result_l_i f xs =
     let rec go i = function
@@ -283,14 +365,14 @@ module Jobs = struct
     in
     go 0 xs
 
-  let single_row (f : query_response_row -> ('a, string) result) (response : query_response) : ('a, string) result =
+  let single_row (f : query_response_row -> ('a, string) result) (response : query_response_data) : ('a, string) result =
     match response.rows with
     | [row] ->
       f row
       |> CCResult.map_err (fun msg -> Printf.sprintf "While decoding a single_row: %s" msg)
     | _ -> Error (Printf.sprintf "Expected a single row, but got %d rows" (List.length response.rows))
 
-  let many_rows (f : query_response_row -> ('a, string) result) (response : query_response) : ('a list, string) result =
+  let many_rows (f : query_response_row -> ('a, string) result) (response : query_response_data) : ('a list, string) result =
     response.rows
     |> map_result_l_i (fun i row ->
         f row
@@ -319,10 +401,10 @@ module Jobs = struct
     let request =
       { kind = "bigquery#queryRequest"
       ; query = q
-      ; useLegacySql = use_legacy_sql
+      ; use_legacy_sql = use_legacy_sql
       ; location = "EU"
-      ; parameterMode = parameter_mode
-      ; queryParameters = params
+      ; parameter_mode = parameter_mode
+      ; query_parameters = params
       }
     in
 
@@ -370,12 +452,58 @@ module Jobs = struct
     match Cohttp.Response.status resp with
     | `OK ->
       Error.parse_body_json query_response_of_yojson body >>= fun response ->
-      Logs_lwt.debug (fun m ->
-          m "Response: total_bytes_processed=%s cache_hit=%b total_rows=%s"
-            response.totalBytesProcessed response.cacheHit response.totalRows
-        ) |> Lwt_result.ok >>= fun () ->
+      Logs_lwt.debug (fun m -> m "%a" pp_query_response response) |> Lwt_result.ok >>= fun () ->
       Lwt_result.return response
 
     | status_code ->
       Error.of_response_status_code_and_body status_code body
+
+  let get_query_results (job_reference : job_reference) : (query_response, [> Error.t]) Lwt_result.t =
+    let open Lwt_result.Infix in
+
+    Auth.get_access_token ~scopes:[Scopes.bigquery] ()
+    |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+    >>= fun token_info ->
+
+    let uri =
+      Uri.make ()
+        ~scheme:"https"
+        ~host:"www.googleapis.com"
+        ~path:(Printf.sprintf "bigquery/v2/projects/%s/queries/%s" job_reference.project_id job_reference.job_id)
+    in
+    let headers =
+      Cohttp.Header.of_list
+        [ ( "Authorization", Printf.sprintf "Bearer %s" token_info.Auth.token.access_token ) ]
+    in
+    Lwt.catch (fun () ->
+        Cohttp_lwt_unix.Client.get uri ~headers
+        |> Lwt_result.ok)
+      (fun e -> Lwt_result.fail (`Network_error e))
+    >>= fun (resp, body) ->
+
+    match Cohttp.Response.status resp with
+    | `OK ->
+      Error.parse_body_json query_response_of_yojson body >>= fun response ->
+      Logs_lwt.debug (fun m -> m "%a" pp_query_response response) |> Lwt_result.ok >>= fun () ->
+      Lwt_result.return response
+
+    | status_code ->
+      Error.of_response_status_code_and_body status_code body
+
+  let rec poll_until_complete ?(attempts = 5) (query_response : query_response) : (query_response_complete, [> Error.t]) Lwt_result.t =
+    let open Lwt_result.Infix in
+      match query_response.job_complete with
+      | Some data ->
+        Lwt.return_ok
+          { kind = query_response.kind
+          ; job_reference = query_response.job_reference
+          ; data = data
+          }
+      | None ->
+        if attempts <= 0 then
+          Lwt.return_error (`Gcloud_retry_timeout "Big_query.Jobs.poll_until_complete: maximum number of retries reached")
+        else
+          Lwt_unix.sleep 0.5 |> Lwt_result.ok >>= fun () ->
+          get_query_results query_response.job_reference >>= poll_until_complete ~attempts:(attempts - 1)
+
 end

@@ -23,6 +23,7 @@ type api_error_response =
 type t =
   [ `Gcloud_auth_error of Auth.error
   | `Gcloud_api_error of Cohttp.Code.status_code * api_error_response option
+  | `Gcloud_retry_timeout of string
   | `Json_parse_error of (string * string) (* error, raw json *)
   | `Json_transform_error of (string * Yojson.Safe.json) (* error, raw json *)
   | `Network_error of exn
@@ -38,6 +39,8 @@ let pp fmt (error : t) =
       (api_error_response
        |> CCOpt.map_or ~default:"Unable to decode error response body"
          (fun e -> Yojson.Safe.to_string (api_error_response_to_yojson e)))
+  | `Gcloud_retry_timeout msg ->
+    Format.fprintf fmt "Gcloud retry timeout: %s" msg
   | `Json_parse_error (msg, json_str) ->
     Format.fprintf fmt "JSON parse error: %s (%s)" msg json_str
   | `Json_transform_error (msg, json_str) ->

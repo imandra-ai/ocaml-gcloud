@@ -54,8 +54,8 @@ module Jobs : sig
   end
 
   type job_reference =
-    { jobId : string
-    ; projectId : string
+    { job_id : string
+    ; project_id : string
     ; location : string
     }
 
@@ -68,24 +68,43 @@ module Jobs : sig
   type query_response_row =
     { f : query_response_field list}
 
+  type query_response_data =
+    { schema : query_response_schema
+    ; rows : query_response_row list
+    ; page_token : string option
+    ; total_rows : string
+    ; total_bytes_processed : string
+    ; cache_hit : bool
+    }
+
+  (** Type of query responses. We may or may not have the data, depending on
+      whether the job completed within the timeout.
+
+      Tip: use {!poll_until_complete} to poll the job until we have some concrete data.
+  *)
   type query_response =
     { kind : string
-    ; schema : query_response_schema
-    ; rows : query_response_row list
-    ; pageToken : string option
-    ; totalRows : string
-    ; jobReference : job_reference
-    ; jobComplete : bool
-    ; totalBytesProcessed : string
-    ; cacheHit : bool
+    ; job_reference : job_reference
+    ; job_complete : query_response_data option
     }
 
   val query_response_to_yojson : query_response -> Yojson.Safe.json
 
   val query : ?project_id:string -> ?use_legacy_sql:bool -> ?params:Param.query_parameter list -> string -> (query_response, [> Error.t ]) Lwt_result.t
+  val get_query_results : job_reference -> (query_response, [> Error.t ]) Lwt_result.t
 
-  val single_row : (query_response_row -> ('a, string) result) -> query_response -> ('a, string) result
-  val many_rows : (query_response_row -> ('a, string) result) -> query_response -> ('a list, string) result
+  (** Type of query responses, when the job is complete and we definitely have some data. *)
+  type query_response_complete =
+    { kind : string
+    ; job_reference : job_reference
+    ; data : query_response_data
+    }
+  val query_response_complete_to_yojson : query_response_complete -> Yojson.Safe.json
+
+  val poll_until_complete : ?attempts:int -> query_response -> (query_response_complete, [> Error.t ]) result Lwt.t
+
+  val single_row : (query_response_row -> ('a, string) result) -> query_response_data -> ('a, string) result
+  val many_rows : (query_response_row -> ('a, string) result) -> query_response_data -> ('a list, string) result
   val single_field : (string -> ('a, string) result) -> query_response_row -> ('a, string) result
   val int : string -> (int, string) result
   val string : string -> (string, string) result
