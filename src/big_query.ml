@@ -257,7 +257,7 @@ module Jobs = struct
 
   type query_response_data =
     { schema : query_response_schema
-    ; rows : query_response_row list
+    ; rows : query_response_row list [@default []]
     ; page_token : string option [@key "pageToken"] [@default None]
     ; total_rows : string [@key "totalRows"]
     ; total_bytes_processed : string [@key "totalBytesProcessed"]
