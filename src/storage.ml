@@ -46,12 +46,12 @@ type list_objects_response =
   { kind : string
   ; nextPageToken: string option [@default None]
   ; prefixes: string list [@default []]
-  ; items : listed_object list
+  ; items : listed_object list [@default []]
   } [@@deriving yojson]
 
 [@@@warning "+39"]
 
-let list_objects (bucket_name : string) : (list_objects_response, [> Error.t ]) Lwt_result.t =
+let list_objects ?(delimiter : string option) ?(prefix : string option) ~(bucket_name : string) () : (list_objects_response, [> Error.t ]) Lwt_result.t =
   let open Lwt_result.Infix in
 
   Auth.get_access_token ~scopes:[Scopes.devstorage_read_only] ()
@@ -60,10 +60,17 @@ let list_objects (bucket_name : string) : (list_objects_response, [> Error.t ]) 
   >>= fun token_info ->
   Lwt.catch
     (fun () ->
+       let query =
+         List.concat
+           [ delimiter |> CCOpt.map_or ~default:[] (fun d -> [ ("delimiter", [ d ]) ])
+           ; prefix |> CCOpt.map_or ~default:[] (fun p -> [ ("prefix", [ p ]) ])
+           ]
+       in
        let uri = Uri.make ()
            ~scheme:"https"
            ~host:"www.googleapis.com"
            ~path:(Printf.sprintf "storage/v1/b/%s/o" bucket_name)
+           ~query
        in
        let headers =
          Cohttp.Header.of_list
