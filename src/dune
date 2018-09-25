@@ -2,7 +2,8 @@
  (name gcloud)
  (public_name gcloud)
  (preprocess (pps ppx_deriving.std ppx_deriving_yojson))
- (libraries cohttp
+ (libraries base64
+            cohttp
             cohttp.lwt
             containers
             cstruct

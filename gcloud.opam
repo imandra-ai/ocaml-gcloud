@@ -10,6 +10,7 @@ depends: [
   "alcotest" {test}
   "alcotest-lwt" {test}
   "dune" {build}
+  "base64"
   "cohttp"
   "cohttp-lwt-unix"
   "containers"

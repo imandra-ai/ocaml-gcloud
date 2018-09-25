@@ -9,10 +9,10 @@ type api_error_item =
   } [@@deriving yojson]
 
 type api_error =
-  { errors : api_error_item list
+  { errors : api_error_item list [@default []]
   ; code: int
   ; message: string
-  } [@@deriving yojson]
+  } [@@deriving yojson { strict = false }]
 
 type api_error_response =
   { error : api_error
