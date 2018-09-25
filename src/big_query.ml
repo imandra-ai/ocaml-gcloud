@@ -259,7 +259,8 @@ module Jobs = struct
     { schema : query_response_schema
     ; rows : query_response_row list [@default []]
     ; page_token : string option [@key "pageToken"] [@default None]
-    ; total_rows : string [@key "totalRows"]
+    ; total_rows : string option [@key "totalRows"] [@default None]
+    ; num_dml_affected_rows : string option [@key "numDmlAffectedRows"] [@default None]
     ; total_bytes_processed : string [@key "totalBytesProcessed"]
     ; cache_hit : bool [@key "cacheHit"]
     }
@@ -302,10 +303,13 @@ module Jobs = struct
     List.concat
       [ [ ( "schema", query_response_schema_to_yojson data.schema )
         ; ( "rows", `List (List.map query_response_row_to_yojson data.rows) )
-        ; ( "totalRows", `String data.total_rows )
         ; ( "totalBytesProcessed", `String data.total_bytes_processed )
         ; ( "cacheHit", `Bool data.cache_hit )
         ]
+      ; data.total_rows |> CCOpt.map_or ~default:[]
+          (fun t -> [ ( "totalRows", `String t ) ])
+      ; data.num_dml_affected_rows |> CCOpt.map_or ~default:[]
+          (fun t -> [ ( "numDmlAffectedRows", `String t ) ])
       ; data.page_token |> CCOpt.map_or ~default:[]
           (fun t -> [ ( "pageToken", `String t ) ])
       ]
@@ -329,11 +333,12 @@ module Jobs = struct
     | None ->
       Format.fprintf fmt "Response: job_id=%s job_complete=false" query_response.job_reference.job_id
     | Some data ->
-      Format.fprintf fmt "Response: job_id=%s total_bytes_processed=%s cache_hit=%b total_rows=%s"
+      Format.fprintf fmt "Response: job_id=%s total_bytes_processed=%s cache_hit=%b%s%s"
         query_response.job_reference.job_id
         data.total_bytes_processed
         data.cache_hit
-        data.total_rows
+        (data.total_rows |> CCOpt.map_or ~default:"" (fun t -> Printf.sprintf " total_rows=%s" t))
+        (data.num_dml_affected_rows |> CCOpt.map_or ~default:"" (fun t -> Printf.sprintf " num_dml_affected_rows=%s" t))
 
   type query_response_complete =
     { kind : string

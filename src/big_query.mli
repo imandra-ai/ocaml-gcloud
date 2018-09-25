@@ -72,7 +72,8 @@ module Jobs : sig
     { schema : query_response_schema
     ; rows : query_response_row list
     ; page_token : string option
-    ; total_rows : string
+    ; total_rows : string option
+    ; num_dml_affected_rows : string option
     ; total_bytes_processed : string
     ; cache_hit : bool
     }
