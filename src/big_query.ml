@@ -31,7 +31,7 @@ module Schema = struct
     `String (show_bq_type bq_type)
 
   let bq_type_of_yojson = function
-    | `String "BOOL" -> Ok BOOL
+    | `String "BOOL" | `String "BOOLEAN" -> Ok BOOL
     | `String "INTEGER" -> Ok INTEGER
     | `String "NUMERIC" -> Ok NUMERIC
     | `String "STRING" -> Ok STRING
@@ -39,7 +39,7 @@ module Schema = struct
     | `String "TIME" -> Ok TIME
     | `String "TIMESTAMP" -> Ok TIMESTAMP
     | `String "RECORD" -> Ok RECORD
-    | _ -> Error "bq_type_of_yojson"
+    | j -> Error ("bq_type_of_yojson: " ^ Yojson.Safe.to_string j)
 
   type field =
     { name : string
