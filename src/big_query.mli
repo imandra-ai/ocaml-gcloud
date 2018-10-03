@@ -23,7 +23,8 @@ module Schema : sig
 end
 
 module Datasets : sig
-  val list : unit -> (string, [> Error.t ]) Lwt_result.t
+  val get : ?project_id:string -> dataset_id:string -> unit -> (string, [> Error.t ]) Lwt_result.t
+  val list : ?project_id:string -> unit -> (string, [> Error.t ]) Lwt_result.t
 end
 
 module Jobs : sig

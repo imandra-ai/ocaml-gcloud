@@ -53,18 +53,58 @@ module Schema = struct
 end
 
 module Datasets = struct
-  let list () : (string, [> Error.t ]) Lwt_result.t =
+  let get ?project_id ~dataset_id () : (string, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
 
     Auth.get_access_token ~scopes:[Scopes.bigquery] ()
     |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
 
+    let project_id =
+      project_id |> CCOpt.get_or ~default:token_info.project_id
+    in
+
     Lwt.catch (fun () ->
         let uri = Uri.make ()
             ~scheme:"https"
             ~host:"www.googleapis.com"
-            ~path:(Printf.sprintf "bigquery/v2/projects/%s/datasets" token_info.project_id)
+            ~path:(Printf.sprintf "bigquery/v2/projects/%s/datasets/%s" project_id dataset_id)
+        in
+        let headers =
+          Cohttp.Header.of_list
+            [ "Authorization", Printf.sprintf "Bearer %s" token_info.Auth.token.access_token ]
+        in
+        Logs_lwt.debug (fun m -> m "GET %a" Uri.pp_hum uri) |> Lwt_result.ok >>= fun () ->
+        Cohttp_lwt_unix.Client.get uri ~headers
+        |> Lwt_result.ok
+      )
+      (fun e ->
+         (`Network_error e)
+         |> Lwt_result.fail)
+
+    >>= fun (resp, body) ->
+    match Cohttp.Response.status resp with
+    | `OK ->
+      Cohttp_lwt.Body.to_string body |> Lwt_result.ok
+    | x ->
+      Error.of_response_status_code_and_body x body
+
+  let list ?project_id () : (string, [> Error.t ]) Lwt_result.t =
+    let open Lwt_result.Infix in
+
+    Auth.get_access_token ~scopes:[Scopes.bigquery] ()
+    |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+    >>= fun token_info ->
+
+    let project_id =
+      project_id |> CCOpt.get_or ~default:token_info.project_id
+    in
+
+    Lwt.catch (fun () ->
+        let uri = Uri.make ()
+            ~scheme:"https"
+            ~host:"www.googleapis.com"
+            ~path:(Printf.sprintf "bigquery/v2/projects/%s/datasets" project_id)
         in
         let headers =
           Cohttp.Header.of_list
