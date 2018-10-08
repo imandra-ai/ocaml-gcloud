@@ -6,7 +6,7 @@ let tests : unit Alcotest.test_case list =
           (* https://cloud.google.com/error-reporting/docs/formatting-error-messages *)
           Gcloud.Stackdriver_errors.report
             { event_time = None
-            ; message = (Gcloud.Stackdriver_errors.stackdriver_nodejs_format ~pos:[%here] "Error: gcloud error report test message")
+            ; message = (Gcloud.Stackdriver_errors.stackdriver_nodejs_format ~pos:[%here] ~type_:"Error" "gcloud error report test message")
             ; context = Some
                   { http_request = None
                   ; user = None
