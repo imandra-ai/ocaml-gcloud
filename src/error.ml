@@ -14,15 +14,19 @@ type api_error =
   ; message: string
   } [@@deriving yojson { strict = false }]
 
-type api_error_response =
+type api_json_error =
   { error : api_error
   } [@@deriving yojson]
+
+type api_error_response =
+  | Json of api_json_error
+  | Raw of string
 
 [@@@warning "+39"]
 
 type t =
   [ `Gcloud_auth_error of Auth.error
-  | `Gcloud_api_error of Cohttp.Code.status_code * api_error_response option
+  | `Gcloud_api_error of Cohttp.Code.status_code * api_error_response
   | `Gcloud_retry_timeout of string
   | `Json_parse_error of (string * string) (* error, raw json *)
   | `Json_transform_error of (string * Yojson.Safe.json) (* error, raw json *)
@@ -36,9 +40,9 @@ let pp fmt (error : t) =
   | `Gcloud_api_error (status_code, api_error_response) ->
     Format.fprintf fmt "Gcloud API returned unexpected status code: %s (%s)"
       (Cohttp.Code.string_of_status status_code)
-      (api_error_response
-       |> CCOpt.map_or ~default:"Unable to decode error response body"
-         (fun e -> Yojson.Safe.to_string (api_error_response_to_yojson e)))
+      (match api_error_response with
+       | Json j -> j |> api_json_error_to_yojson |> Yojson.Safe.to_string
+       | Raw s -> s)
   | `Gcloud_retry_timeout msg ->
     Format.fprintf fmt "Gcloud retry timeout: %s" msg
   | `Json_parse_error (msg, json_str) ->
@@ -51,7 +55,6 @@ let pp fmt (error : t) =
 let parse_body_json (transform : Yojson.Safe.json -> ('a, string) result) (body : Cohttp_lwt.Body.t) : ('a, [> t]) Lwt_result.t =
   let open Lwt.Infix in
   Cohttp_lwt.Body.to_string body >>= fun body_str ->
-
   let parse_result = try
       Ok (body_str |> Yojson.Safe.from_string)
     with
@@ -67,10 +70,11 @@ let parse_body_json (transform : Yojson.Safe.json -> ('a, string) result) (body 
   |> Lwt.return
 
 let of_response_status_code_and_body (status_code : Cohttp.Code.status_code) (body : Cohttp_lwt.Body.t) : ('a, [> t]) Lwt_result.t =
-  let open Lwt_result.Infix in
-  Lwt.Infix.(
-    parse_body_json api_error_response_of_yojson body >|= function
-    | Ok error -> Ok (Some error)
-    | Error _ -> Ok None
-  ) >>= fun error_opt ->
-  Lwt_result.fail (`Gcloud_api_error (status_code, error_opt))
+  let open Lwt.Infix in
+  parse_body_json api_json_error_of_yojson body >>= function
+  | Ok parsed_error ->
+    Lwt_result.fail (`Gcloud_api_error (status_code, Json parsed_error))
+  | Error (`Json_parse_error (_, body_str)) ->
+    Lwt_result.fail (`Gcloud_api_error (status_code, Raw body_str))
+  | Error e ->
+    Lwt_result.fail (`Gcloud_api_error (status_code, Raw (Format.asprintf "Error reading api error response: %a" pp e)))
