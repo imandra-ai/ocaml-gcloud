@@ -395,7 +395,7 @@ let get_access_token ?(scopes : string list = []) () : (token_info, error) Lwt_r
     }
   in
   let has_requested_scopes token_info = CCList.subset ~eq:String.equal scopes token_info.scopes in
-  let is_expired token_info = Unix.time () > token_info.created_at +. (float_of_int token_info.token.expires_in) in
+  let is_expired token_info = Unix.time () > (token_info.created_at +. (float_of_int token_info.token.expires_in) -. 30.) in
   let open Lwt.Infix in
   Lwt_mvar.take token_info_mvar >>= begin function
     | Some token_info when has_requested_scopes token_info && not (is_expired token_info) ->
