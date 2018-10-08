@@ -26,6 +26,7 @@ depends: [
   "ppx_here" {test}
   "ptime" {test}
   "sexplib" {< "v0.11.0"}
+  "ssl" {= "0.5.5"}
   "x509"
   "yojson"
 ]
