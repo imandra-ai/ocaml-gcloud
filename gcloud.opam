@@ -25,6 +25,7 @@ depends: [
   "ppx_deriving_yojson"
   "ppx_here" {test}
   "ptime" {test}
+  "sexplib" {< "v0.11.0"}
   "x509"
   "yojson"
 ]
