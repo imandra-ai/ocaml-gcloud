@@ -503,7 +503,7 @@ module Jobs = struct
     | status_code ->
       Error.of_response_status_code_and_body status_code body
 
-  let get_query_results (job_reference : job_reference) : (query_response, [> Error.t]) Lwt_result.t =
+  let get_query_results ?(page_token) (job_reference : job_reference) : (query_response, [> Error.t]) Lwt_result.t =
     let open Lwt_result.Infix in
 
     Auth.get_access_token ~scopes:[Scopes.bigquery] ()
@@ -515,6 +515,7 @@ module Jobs = struct
         ~scheme:"https"
         ~host:"www.googleapis.com"
         ~path:(Printf.sprintf "bigquery/v2/projects/%s/queries/%s" job_reference.project_id job_reference.job_id)
+        ~query:(page_token |> CCOpt.map (fun page_token -> ("pageToken", [page_token])) |> CCOpt.to_list)
     in
     let headers =
       Cohttp.Header.of_list
