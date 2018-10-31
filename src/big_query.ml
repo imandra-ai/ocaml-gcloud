@@ -377,10 +377,11 @@ module Jobs = struct
     | None ->
       Format.fprintf fmt "Response: job_id=%s job_complete=false" query_response.job_reference.job_id
     | Some data ->
-      Format.fprintf fmt "Response: job_id=%s total_bytes_processed=%s cache_hit=%b%s%s"
+      Format.fprintf fmt "Response: job_id=%s total_bytes_processed=%s cache_hit=%b rows=%d%s%s"
         query_response.job_reference.job_id
         data.total_bytes_processed
         data.cache_hit
+        (CCList.length data.rows)
         (data.total_rows |> CCOpt.map_or ~default:"" (fun t -> Printf.sprintf " total_rows=%s" t))
         (data.num_dml_affected_rows |> CCOpt.map_or ~default:"" (fun t -> Printf.sprintf " num_dml_affected_rows=%s" t))
 
