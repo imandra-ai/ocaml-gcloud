@@ -50,6 +50,10 @@ module Schema = struct
     }
   [@@deriving make, yojson]
   [@@@warning "+39"]
+
+  let bq_type_of_field field = field.bq_type
+  let name_of_field field = field.name
+  let mode_of_field field = field.mode
 end
 
 module Datasets = struct

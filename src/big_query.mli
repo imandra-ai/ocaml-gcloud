@@ -20,6 +20,9 @@ module Schema : sig
   type field
   val make_field : name:string -> ?description:string option -> mode:mode -> bq_type:bq_type -> ?fields:field list -> unit -> field
   val field_to_yojson : field -> Yojson.Safe.json
+  val bq_type_of_field : field -> bq_type
+  val name_of_field : field -> string
+  val mode_of_field : field -> mode
 end
 
 module Datasets : sig
