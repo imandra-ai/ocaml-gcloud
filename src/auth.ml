@@ -371,7 +371,7 @@ let rec first_ok ~(error : 'e) (fs : (unit -> ('a, 'e) result Lwt.t) list) : ('a
       | Error error -> first_ok ~error fs
     end
 
-let discover_credentials () : (credentials * string, error) Lwt_result.t =
+let discover_credentials () : (credentials * string, [> error]) Lwt_result.t =
   [ Discover_credentials_path_from_env
   ; Discover_credentials_json_from_env
   ; Discover_credentials_from_cloud_sdk_path
@@ -380,7 +380,7 @@ let discover_credentials () : (credentials * string, error) Lwt_result.t =
   |> List.map (fun discovery_mode -> fun () -> discover_credentials_with discovery_mode)
   |> first_ok ~error:`No_credentials
 
-let get_access_token ?(scopes : string list = []) () : (token_info, error) Lwt_result.t =
+let get_access_token ?(scopes : string list = []) () : (token_info, [> error]) Lwt_result.t =
   let get_new_access_token scopes =
     let open Lwt_result.Infix in
     discover_credentials () >>= fun (credentials, project_id) ->
