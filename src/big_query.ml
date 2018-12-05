@@ -488,8 +488,13 @@ module Jobs = struct
           |> Cohttp_lwt.Body.of_string
         in
         Logs_lwt.debug (fun m ->
-            m "Query: %s"
-              (if String.length q > 1000 then CCString.sub q 0 1000 ^ "..." else q))
+            let truncate str =
+              if String.length str > 1000 then CCString.sub str 0 1000 ^ "..." else str
+            in
+            let q_trimmed =
+              q |> CCString.replace ~sub:"\n" ~by:" " |> truncate
+            in
+            m "Query: %s" q_trimmed)
         |> Lwt_result.ok >>= fun () ->
         Cohttp_lwt_unix.Client.post uri ~headers ~body
         |> Lwt_result.ok
