@@ -402,18 +402,15 @@ module Jobs = struct
          ])
 
   let map_result_l_i f xs =
-    let rec go i = function
+    let rec go acc i = function
       | x :: xs ->
         begin match f i x with
-          | Ok y -> begin match go (i+1) xs with
-              | Ok ys -> Ok (y :: ys)
-              | Error e -> Error e
-            end
+          | Ok y -> go (y :: acc) (i+1) xs
           | Error e -> Error e
         end
-      | [] -> Ok []
+      | [] -> Ok (List.rev acc)
     in
-    go 0 xs
+    go [] 0 xs
 
   let single_row (f : query_response_row -> ('a, string) result) (response : query_response_data) : ('a, string) result =
     match response.rows with
