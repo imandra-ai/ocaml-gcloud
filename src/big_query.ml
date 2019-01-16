@@ -437,7 +437,7 @@ module Jobs = struct
 
   let string (str : string) = Ok str
 
-  let query ?project_id ?(use_legacy_sql=false) ?(params = []) q : (query_response, [> Error.t ]) Lwt_result.t =
+  let query ?project_id ?(use_legacy_sql=false) ?(params = []) ?(location = "EU") q : (query_response, [> Error.t ]) Lwt_result.t =
     let parameter_mode =
       if use_legacy_sql || params = [] then
         None
@@ -449,7 +449,7 @@ module Jobs = struct
       { kind = "bigquery#queryRequest"
       ; query = q
       ; use_legacy_sql = use_legacy_sql
-      ; location = "EU"
+      ; location
       ; parameter_mode = parameter_mode
       ; query_parameters = params
       }
