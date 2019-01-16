@@ -276,7 +276,7 @@ module Jobs = struct
     ; use_legacy_sql : bool [@key "useLegacySql"]
     ; location : string
     ; query_parameters : Param.query_parameter list [@key "queryParameters"]
-    ; parameter_mode : parameter_mode option [@key "parameterMode"]
+    ; parameter_mode : parameter_mode option [@key "parameterMode"] [@default None]
     }
   [@@deriving to_yojson]
 
