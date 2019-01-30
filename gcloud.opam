@@ -29,4 +29,5 @@ depends: [
   "ssl" {= "0.5.5"}
   "x509"
   "yojson"
+  "ppx_sexp_conv" {< "v0.11.0"}
 ]
