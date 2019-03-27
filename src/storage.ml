@@ -2,7 +2,7 @@ module Scopes = struct
   let devstorage_read_only = "https://www.googleapis.com/auth/devstorage.read_only"
 end
 
-let get_object (bucket_name : string) (object_path : string) : (string, [> Error.t ]) Lwt_result.t =
+let get_object_stream (bucket_name : string) (object_path : string) : (string Lwt_stream.t, [> Error.t ]) Lwt_result.t =
   let open Lwt_result.Infix in
 
   Auth.get_access_token ~scopes:[Scopes.devstorage_read_only] ()
@@ -29,9 +29,16 @@ let get_object (bucket_name : string) (object_path : string) : (string, [> Error
   >>= fun (resp, body) ->
   match Cohttp.Response.status resp with
   | `OK ->
-    Cohttp_lwt.Body.to_string body |> Lwt_result.ok
+    Cohttp_lwt.Body.to_stream body |> Lwt_result.return
   | status_code ->
     Error.of_response_status_code_and_body status_code body
+
+let get_object (bucket_name : string) (object_path : string) : (string, [> Error.t ]) Lwt_result.t =
+  let open Lwt_result.Infix in
+  get_object_stream bucket_name object_path >>= fun stream ->
+  Lwt_stream.to_list stream
+  |> Lwt.map (String.concat "\n")
+  |> Lwt_result.ok
 
 [@@@warning "-39"]
 
