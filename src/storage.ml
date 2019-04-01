@@ -37,7 +37,7 @@ let get_object (bucket_name : string) (object_path : string) : (string, [> Error
   let open Lwt_result.Infix in
   get_object_stream bucket_name object_path >>= fun stream ->
   Lwt_stream.to_list stream
-  |> Lwt.map (String.concat "\n")
+  |> Lwt.map (String.concat "")
   |> Lwt_result.ok
 
 [@@@warning "-39"]
