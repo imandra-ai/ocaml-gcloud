@@ -58,7 +58,13 @@ type list_objects_response =
 
 [@@@warning "+39"]
 
-let list_objects ?(delimiter : string option) ?(prefix : string option) ~(bucket_name : string) () : (list_objects_response, [> Error.t ]) Lwt_result.t =
+let list_objects
+    ?(delimiter : string option)
+    ?(prefix : string option)
+    ?(page_token : string option)
+    ~(bucket_name : string)
+    ()
+  : (list_objects_response, [> Error.t ]) Lwt_result.t =
   let open Lwt_result.Infix in
 
   Auth.get_access_token ~scopes:[Scopes.devstorage_read_only] ()
@@ -71,6 +77,7 @@ let list_objects ?(delimiter : string option) ?(prefix : string option) ~(bucket
          List.concat
            [ delimiter |> CCOpt.map_or ~default:[] (fun d -> [ ("delimiter", [ d ]) ])
            ; prefix |> CCOpt.map_or ~default:[] (fun p -> [ ("prefix", [ p ]) ])
+           ; page_token |> CCOpt.map_or ~default:[] (fun t -> [ ("pageToken", [ t ])])
            ]
        in
        let uri = Uri.make ()
