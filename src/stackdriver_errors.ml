@@ -21,6 +21,7 @@ type http_request_context =
 type source_location =
   { file_path : string [@key "filePath"]
   ; line_number: int [@key "lineNumber"]
+  (* Must be non-empty if no stackdriver-parseable stack trace in report_request.message *)
   ; function_name: string [@key "functionName"]
   } [@@deriving yojson]
 
