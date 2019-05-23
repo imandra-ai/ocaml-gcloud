@@ -292,7 +292,7 @@ module Jobs = struct
   [@@deriving yojson]
 
   type query_response_field =
-    { v : string }
+    { v : string option }
   [@@deriving yojson]
 
   type query_response_row =
@@ -425,17 +425,22 @@ module Jobs = struct
         f row
         |> CCResult.map_err (fun msg -> Printf.sprintf "While decoding row %d: %s" i msg))
 
-  let single_field (f : string -> ('a, string) result) (row : query_response_row) : ('a, string) result =
+  let single_field (f : string option -> ('a, string) result) (row : query_response_row) : ('a, string) result =
     match row.f with
     | [field] -> f field.v
       |> CCResult.map_err (fun msg -> Printf.sprintf "While decoding a single_field: %s" msg)
     | _ -> Error (Printf.sprintf "Expected row with a single field, but got %d fields" (List.length row.f))
 
   let int str =
-    CCInt.of_string str
-    |> CCOpt.to_result (Printf.sprintf "Expected an int, but got: %S" str)
+    str
+    |> CCOpt.flat_map CCInt.of_string
+    |> CCOpt.to_result
+      (CCFormat.asprintf "Expected an int, but got: %a" CCFormat.(opt string) str)
 
-  let string (str : string) = Ok str
+  let string (str : string option) =
+    match str with
+    | None -> Error "Expected a string, but got Null"
+    | Some str -> Ok str
 
   let query ?project_id ?(use_legacy_sql=false) ?(params = []) ?(location = "EU") q : (query_response, [> Error.t ]) Lwt_result.t =
     let parameter_mode =
