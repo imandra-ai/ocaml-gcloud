@@ -292,8 +292,35 @@ module Jobs = struct
   [@@deriving yojson]
 
   type query_response_field =
-    { v : string option }
-  [@@deriving yojson]
+    { v : query_response_value }
+  and query_response_value =
+    | Null
+    | String of string
+    | List of query_response_field list
+
+  let rec query_response_field_of_yojson = function
+    | `Assoc [("v", value_json)] ->
+      CCResult.Infix.(
+        query_response_value_of_yojson value_json >>= fun v ->
+        Ok { v }
+      )
+    | _ -> Error "query_response_field_of_yojson"
+  and query_response_value_of_yojson = function
+    | `Null -> Ok Null
+    | `String s -> Ok (String s)
+    | `List jsons ->
+       jsons
+       |> CCResult.map_l query_response_field_of_yojson
+       |> CCResult.map (fun fields -> List fields)
+    | _ -> Error "query_response_value_of_yojson"
+
+  let rec query_response_field_to_yojson field =
+    `Assoc [("v", query_response_value_to_yojson field.v)]
+  and query_response_value_to_yojson = function
+    | Null -> `Null
+    | String s -> `String s
+    | List fields ->
+      `List (fields |> CCList.map query_response_field_to_yojson)
 
   type query_response_row =
     { f : query_response_field list}
@@ -425,22 +452,50 @@ module Jobs = struct
         f row
         |> CCResult.map_err (fun msg -> Printf.sprintf "While decoding row %d: %s" i msg))
 
-  let single_field (f : string option -> ('a, string) result) (row : query_response_row) : ('a, string) result =
+  let single_field (f : query_response_field -> ('a, string) result) (row : query_response_row) : ('a, string) result =
     match row.f with
-    | [field] -> f field.v
+    | [field] -> f field
       |> CCResult.map_err (fun msg -> Printf.sprintf "While decoding a single_field: %s" msg)
     | _ -> Error (Printf.sprintf "Expected row with a single field, but got %d fields" (List.length row.f))
 
-  let int str =
-    str
-    |> CCOpt.flat_map CCInt.of_string
-    |> CCOpt.to_result
-      (CCFormat.asprintf "Expected an int, but got: %a" CCFormat.(opt string) str)
+  let string (field : query_response_field) : (string, string) result =
+    match field.v with
+    | Null -> Error "Expected a string, but got Null"
+    | List _ -> Error "Expected a string, but got an array"
+    | String str -> Ok str
 
-  let string (str : string option) =
-    match str with
-    | None -> Error "Expected a string, but got Null"
-    | Some str -> Ok str
+  let int (field : query_response_field) : (int, string) result =
+    string field
+    |> CCResult.flat_map (fun str ->
+        str |> int_of_string_opt
+        |> CCOpt.to_result (CCFormat.sprintf "expected an int, but got %S" str))
+
+  let float (field : query_response_field) : (float, string) result =
+    string field
+    |> CCResult.flat_map (fun str ->
+        str |> float_of_string_opt
+        |> CCOpt.to_result (CCFormat.sprintf "expected a float, but got %S" str))
+
+  let bool (field : query_response_field) : (bool, string) result =
+    string field
+    |> CCResult.flat_map (fun str ->
+        str |> bool_of_string_opt
+        |> CCOpt.to_result (CCFormat.sprintf "expected a bool, but got %S" str))
+
+  let nullable (f : query_response_field -> ('a, string) result) (field : query_response_field) : ('a option, string) result =
+    match field.v with
+    | Null -> Ok None
+    | _ -> f field |> CCResult.map CCOpt.pure
+
+  let list (f : query_response_field -> ('a, string) result) (field : query_response_field) : ('a list, string) result =
+    match field.v with
+    | Null -> Error "Expected a list, but got Null"
+    | String str -> Error (CCFormat.sprintf "Expected a list, but got: %S" str)
+    | List vs ->
+      vs |> CCResult.map_l f
+
+  let tag msg result =
+    result |> CCResult.map_err (CCFormat.sprintf "%s: %s" msg)
 
   let query ?project_id ?(use_legacy_sql=false) ?(params = []) ?(location = "EU") q : (query_response, [> Error.t ]) Lwt_result.t =
     let parameter_mode =

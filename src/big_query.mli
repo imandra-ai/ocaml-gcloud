@@ -67,7 +67,11 @@ module Jobs : sig
     { fields : Schema.field list}
 
   type query_response_field =
-    { v : string option }
+    { v : query_response_value }
+  and query_response_value =
+    | Null
+    | String of string
+    | List of query_response_field list
 
   type query_response_row =
     { f : query_response_field list}
@@ -110,7 +114,12 @@ module Jobs : sig
 
   val single_row : (query_response_row -> ('a, string) result) -> query_response_data -> ('a, string) result
   val many_rows : (query_response_row -> ('a, string) result) -> query_response_data -> ('a list, string) result
-  val single_field : (string option -> ('a, string) result) -> query_response_row -> ('a, string) result
-  val int : string option -> (int, string) result
-  val string : string option -> (string, string) result
+  val single_field : (query_response_field -> ('a, string) result) -> query_response_row -> ('a, string) result
+  val string : query_response_field -> (string, string) result
+  val int : query_response_field -> (int, string) result
+  val bool : query_response_field -> (bool, string) result
+  val float : query_response_field -> (float, string) result
+  val nullable : (query_response_field -> ('a, string) result) -> query_response_field -> ('a option, string) result
+  val list : (query_response_field -> ('a, string) result) -> query_response_field -> ('a list, string) result
+  val tag : string -> ('a, string) result -> ('a, string) result
 end
