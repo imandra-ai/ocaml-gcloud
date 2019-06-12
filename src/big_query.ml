@@ -20,6 +20,7 @@ module Schema = struct
     | BOOL
     | INTEGER
     | NUMERIC
+    | FLOAT
     | STRING
     | DATE
     | TIME
@@ -34,6 +35,7 @@ module Schema = struct
     | `String "BOOL" | `String "BOOLEAN" -> Ok BOOL
     | `String "INTEGER" -> Ok INTEGER
     | `String "NUMERIC" -> Ok NUMERIC
+    | `String "FLOAT" -> Ok FLOAT
     | `String "STRING" -> Ok STRING
     | `String "DATE" -> Ok DATE
     | `String "TIME" -> Ok TIME

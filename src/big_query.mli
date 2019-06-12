@@ -10,6 +10,7 @@ module Schema : sig
     | BOOL
     | INTEGER
     | NUMERIC
+    | FLOAT
     | STRING
     | DATE
     | TIME
