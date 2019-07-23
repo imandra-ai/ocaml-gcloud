@@ -31,6 +31,10 @@ module Datasets : sig
   val list : ?project_id:string -> unit -> (string, [> Error.t ]) Lwt_result.t
 end
 
+module Tables : sig
+  val list : ?project_id:string -> dataset_id:string -> unit -> (string, [> Error.t ]) Lwt_result.t
+end
+
 module Jobs : sig
   module Param : sig
     type numeric
