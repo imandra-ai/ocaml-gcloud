@@ -130,54 +130,69 @@ module Datasets = struct
       Cohttp_lwt.Body.to_string body |> Lwt_result.ok
     | x ->
       Error.of_response_status_code_and_body x body
-end
 
-module Tables = struct
+  module Tables = struct
 
-  let list ?project_id ?max_results ?page_token ~dataset_id () : (string, [> Error.t ]) Lwt_result.t =
-    let open Lwt_result.Infix in
+    type table =
+      { id : string;
+        kind: string;
+        friendlyName: string;
+        expirationTime : string;
+        creationTime : string } [@@deriving yojson{strict=false}]
 
-    Auth.get_access_token ~scopes:[Scopes.bigquery] ()
-    |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
-    >>= fun token_info ->
+    type resp =
+      { tables : table list;
+        kind: string;
+        etag: string;
+        nextPageToken: string;
+        totalItems : int } [@@deriving yojson{strict=false}]
 
-    let project_id =
-      project_id |> CCOpt.get_or ~default:token_info.project_id
-    in
+    let list ?project_id ?max_results ?page_token ~dataset_id () : (resp, [> Error.t ]) Lwt_result.t =
+      let open Lwt_result.Infix in
 
-    Lwt.catch (fun () ->
-        let uri = Uri.make ()
-            ~scheme:"https"
-            ~host:"www.googleapis.com"
-            ~path:(Printf.sprintf "bigquery/v2/projects/%s/datasets/%s/tables" project_id dataset_id)
+      Auth.get_access_token ~scopes:[Scopes.bigquery] ()
+      |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+      >>= fun token_info ->
 
-        in
-        let uri = match max_results with
-          | None -> uri
-          | Some max_results -> Uri.add_query_param' uri ("maxResults", string_of_int max_results)
-        in
-        let uri = match page_token with
-          | None -> uri
-          | Some page_token -> Uri.add_query_param' uri ("pageToken", page_token)
-        in
-        let headers =
-          Cohttp.Header.of_list
-            [ "Authorization", Printf.sprintf "Bearer %s" token_info.Auth.token.access_token ]
-        in
-        Logs_lwt.debug (fun m -> m "GET %a" Uri.pp_hum uri) |> Lwt_result.ok >>= fun () ->
-        Cohttp_lwt_unix.Client.get uri ~headers
-        |> Lwt_result.ok
-      )
-      (fun e ->
-         (`Network_error e)
-         |> Lwt_result.fail)
+      let project_id =
+        project_id |> CCOpt.get_or ~default:token_info.project_id
+      in
 
-    >>= fun (resp, body) ->
-    match Cohttp.Response.status resp with
-    | `OK ->
-      Cohttp_lwt.Body.to_string body |> Lwt_result.ok
-    | x ->
-      Error.of_response_status_code_and_body x body
+      Lwt.catch (fun () ->
+          let uri = Uri.make ()
+              ~scheme:"https"
+              ~host:"www.googleapis.com"
+              ~path:(Printf.sprintf "bigquery/v2/projects/%s/datasets/%s/tables" project_id dataset_id)
+
+          in
+          let uri = match max_results with
+            | None -> uri
+            | Some max_results -> Uri.add_query_param' uri ("maxResults", string_of_int max_results)
+          in
+          let uri = match page_token with
+            | None -> uri
+            | Some page_token -> Uri.add_query_param' uri ("pageToken", page_token)
+          in
+          let headers =
+            Cohttp.Header.of_list
+              [ "Authorization", Printf.sprintf "Bearer %s" token_info.Auth.token.access_token ]
+          in
+          Logs_lwt.debug (fun m -> m "GET %a" Uri.pp_hum uri) |> Lwt_result.ok >>= fun () ->
+          Cohttp_lwt_unix.Client.get uri ~headers
+          |> Lwt_result.ok
+        )
+        (fun e ->
+           (`Network_error e)
+           |> Lwt_result.fail)
+
+      >>= fun (resp, body) ->
+      match Cohttp.Response.status resp with
+      | `OK ->
+        Error.parse_body_json resp_of_yojson body
+      | x ->
+        Error.of_response_status_code_and_body x body
+
+  end
 
 end
 
