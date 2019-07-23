@@ -136,15 +136,15 @@ module Datasets = struct
     type table =
       { id : string;
         kind: string;
-        friendlyName: string;
-        expirationTime : string;
+        friendlyName: string option [@default None];
+        expirationTime : string option [@default None];
         creationTime : string } [@@deriving yojson{strict=false}]
 
     type resp =
       { tables : table list;
         kind: string;
         etag: string;
-        nextPageToken: string;
+        nextPageToken: string option [@default None];
         totalItems : int } [@@deriving yojson{strict=false}]
 
     let list ?project_id ?max_results ?page_token ~dataset_id () : (resp, [> Error.t ]) Lwt_result.t =

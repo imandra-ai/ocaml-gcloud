@@ -35,15 +35,15 @@ module Datasets : sig
     type table =
       { id : string;
         kind: string;
-        friendlyName: string;
-        expirationTime : string;
+        friendlyName: string option;
+        expirationTime : string option;
         creationTime : string }
 
     type resp =
       { tables : table list;
         kind: string;
         etag: string;
-        nextPageToken: string;
+        nextPageToken: string option;
         totalItems : int }
 
     val list : ?project_id:string ->  ?max_results:int -> ?page_token:string -> dataset_id:string -> unit -> (resp, [> Error.t ]) Lwt_result.t
