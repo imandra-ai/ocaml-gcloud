@@ -29,6 +29,26 @@ end
 module Datasets : sig
   val get : ?project_id:string -> dataset_id:string -> unit -> (string, [> Error.t ]) Lwt_result.t
   val list : ?project_id:string -> unit -> (string, [> Error.t ]) Lwt_result.t
+
+  module Tables : sig
+
+    type table =
+      { id : string;
+        kind: string;
+        friendlyName: string option;
+        expirationTime : string option;
+        creationTime : string }
+
+    type resp =
+      { tables : table list;
+        kind: string;
+        etag: string;
+        nextPageToken: string option;
+        totalItems : int }
+
+    val list : ?project_id:string ->  ?max_results:int -> ?page_token:string -> dataset_id:string -> unit -> (resp, [> Error.t ]) Lwt_result.t
+  end
+
 end
 
 module Jobs : sig
