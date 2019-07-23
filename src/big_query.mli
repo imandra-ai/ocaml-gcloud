@@ -32,7 +32,7 @@ module Datasets : sig
 end
 
 module Tables : sig
-  val list : ?project_id:string -> dataset_id:string -> unit -> (string, [> Error.t ]) Lwt_result.t
+  val list : ?project_id:string ->  ?max_results:int -> ?page_token:string -> dataset_id:string -> unit -> (string, [> Error.t ]) Lwt_result.t
 end
 
 module Jobs : sig

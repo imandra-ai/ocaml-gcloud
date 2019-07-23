@@ -134,7 +134,7 @@ end
 
 module Tables = struct
 
-  let list ?project_id ~dataset_id () : (string, [> Error.t ]) Lwt_result.t =
+  let list ?project_id ?max_results ?page_token ~dataset_id () : (string, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
 
     Auth.get_access_token ~scopes:[Scopes.bigquery] ()
@@ -150,6 +150,15 @@ module Tables = struct
             ~scheme:"https"
             ~host:"www.googleapis.com"
             ~path:(Printf.sprintf "bigquery/v2/projects/%s/datasets/%s/tables" project_id dataset_id)
+
+        in
+        let uri = match max_results with
+          | None -> uri
+          | Some max_results -> Uri.add_query_param' uri ("maxResults", string_of_int max_results)
+        in
+        let uri = match page_token with
+          | None -> uri
+          | Some page_token -> Uri.add_query_param' uri ("pageToken", page_token)
         in
         let headers =
           Cohttp.Header.of_list
