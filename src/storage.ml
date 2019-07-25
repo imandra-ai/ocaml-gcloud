@@ -51,7 +51,7 @@ type listed_object =
 
 type list_objects_response =
   { kind : string
-  ; nextPageToken: string option [@default None]
+  ; next_page_token: string option [@default None] [@key "nextPageToken"]
   ; prefixes: string list [@default []]
   ; items : listed_object list [@default []]
   } [@@deriving yojson]
