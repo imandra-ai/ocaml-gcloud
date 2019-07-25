@@ -52,7 +52,7 @@ module Subscriptions = struct
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
     | `OK ->
-      Lwt_result.ok ()
+      Lwt_result.return ()
     | x ->
       Error.of_response_status_code_and_body x body
 
