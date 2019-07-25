@@ -8,7 +8,7 @@ module Subscriptions = struct
     ackIds : string list
   } [@@deriving yojson]
 
-  let acknowledge ?project_id ~subscription_id ~ids : (unit, [> Error.t ]) Lwt_result.t =
+  let acknowledge ?project_id ~subscription_id ~ids () : (unit, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
 
     Auth.get_access_token ~scopes:[Scopes.pubsub] ()
