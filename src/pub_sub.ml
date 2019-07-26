@@ -122,7 +122,7 @@ module Subscriptions = struct
     | `OK ->
       Error.parse_body_json received_messages_of_yojson body >|= fun { received_messages } ->
       let received_messages =
-        received_messagse
+        received_messages
         |> List.map (fun ({message;_} as msg) ->
             { msg with message = { message with data = B64.decode message.data} } )
       in
