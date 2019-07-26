@@ -73,7 +73,7 @@ module Subscriptions = struct
   } [@@deriving yojson]
 
   type received_messages = {
-    received_messages : received_message list [@key "receivedMessages"]
+    received_messages : received_message list [@key "receivedMessages"] [@default []]
   } [@@deriving yojson]
 
   let pull ?project_id ~subscription_id ~max_messages ?(return_immediately=true) () =
