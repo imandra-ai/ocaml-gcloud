@@ -1,0 +1,31 @@
+{
+    "name": "gcloud",
+    "version": "0.1.0",
+    "description": "Gcloud client",
+    "license": "MIT",
+    "esy": {
+        "build": "dune build -p gcloud"
+    },
+    "source": "./gcloud.opam",
+    "override": {
+        "resolutions": {
+            "@opam/jwt": "aestheticintegration/ocaml-jwt:jwt.opam#9f8c156",
+            "@opam/nocrypto": "mirleft/ocaml-nocrypto:opam#ed7bb8d911dc340e36d85d335d9edb8339f0932d",
+            "@opam/ppx_sexp_conv": {
+                "source": "janestreet/ppx_sexp_conv:ppx_sexp_conv.opam#1ec36f1bd43755945c2b8ec43270257f5d272a69",
+                "override": {
+                    "dependencies": {
+                        "@opam/ppx_deriving": "4.2.1"
+                    }
+                }
+            },
+            "@opam/cohttp": "opam:1.1.1",
+            "@opam/cohttp-lwt": "opam:1.1.1",
+            "@opam/cohttp-lwt-unix": "opam:1.1.1",
+            "@opam/conduit": "opam:1.1.0",
+            "@opam/conduit-lwt": "opam:1.1.0",
+            "@opam/conduit-lwt-unix": "opam:1.1.0",
+            "@opam/x509": "opam:0.6.1"
+        }
+    }
+}
