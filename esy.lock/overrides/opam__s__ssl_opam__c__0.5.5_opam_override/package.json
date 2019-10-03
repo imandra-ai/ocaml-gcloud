@@ -1,0 +1,13 @@
+{
+  "build": [
+    "sed -i'' -e 's/OCAMLFIND_LDCONF=.*/OCAMLFIND_LDCONF=\"ignore\"/g' ./configure",
+    "#{os == 'darwin' ? './osx-configure.sh' : './configure --prefix'} #{self.install}",
+    "make"
+  ],
+  "exportedEnv": {
+    "CAML_LD_LIBRARY_PATH": {
+      "val": "#{self.lib / 'ssl' : $CAML_LD_LIBRARY_PATH}",
+      "scope": "global"
+    }
+  }
+}
