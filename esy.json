@@ -6,6 +6,9 @@
     "esy": {
         "build": "dune build -p gcloud"
     },
+    "scripts": {
+        "test": "dune exec test/test_main.exe"
+    },
     "source": "./gcloud.opam",
     "override": {
         "resolutions": {
