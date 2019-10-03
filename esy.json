@@ -7,7 +7,7 @@
         "build": "dune build -p gcloud"
     },
     "scripts": {
-        "test": "dune exec test/test_main.exe"
+        "test": "dune runtest"
     },
     "source": "./gcloud.opam",
     "override": {
