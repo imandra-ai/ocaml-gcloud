@@ -685,4 +685,24 @@ module Jobs = struct
           Lwt_unix.sleep 0.5 |> Lwt_result.ok >>= fun () ->
           get_query_results query_response.job_reference >>= poll_until_complete ~attempts:(attempts - 1)
 
+
+  let fetch_all_rows (response : query_response_complete) =
+    let rec aux
+        all_rows (response : query_response_complete) =
+      match response.data.page_token with
+      | None ->
+        Lwt_result.return
+          { response with
+            data =
+              { response.data with rows = Util.List.concat_rev all_rows }
+          }
+      | Some page_token ->
+        let open Lwt_result.Infix in
+                  get_query_results ~page_token response.job_reference
+          >>= poll_until_complete
+        >>= fun response2 ->
+        aux (CCList.rev response2.data.rows :: all_rows) response2
+    in
+    aux [ CCList.rev response.data.rows ] response
+
 end

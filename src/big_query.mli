@@ -133,6 +133,8 @@ module Jobs : sig
 
   val poll_until_complete : ?attempts:int -> query_response -> (query_response_complete, [> Error.t ]) result Lwt.t
 
+  val fetch_all_rows : query_response_complete -> (query_response_complete, [> Error.t ]) Lwt_result.t
+
   val single_row : (query_response_row -> ('a, string) result) -> query_response_data -> ('a, string) result
   val many_rows : (query_response_row -> ('a, string) result) -> query_response_data -> ('a list, string) result
   val single_field : (query_response_field -> ('a, string) result) -> query_response_row -> ('a, string) result
