@@ -22,4 +22,6 @@ module Subscriptions : sig
 
   val pull : ?project_id:string -> subscription_id:string -> max_messages:int -> ?return_immediately:bool -> unit -> (received_messages, [> Error.t ]) Lwt_result.t
 
+  val log_src_pull : Logs.Src.t
+
 end

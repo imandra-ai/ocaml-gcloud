@@ -4,6 +4,8 @@ end
 
 module Subscriptions = struct
 
+  let log_src_pull = Logs.Src.create "Gcloud.Pub_sub.Subscriptions.pull"
+
   type acknowledge_request = {
     ackIds : string list
   } [@@deriving yojson]
@@ -109,7 +111,7 @@ module Subscriptions = struct
           Cohttp.Header.of_list
             [ "Authorization", Printf.sprintf "Bearer %s" token_info.Auth.token.access_token ]
         in
-        Logs_lwt.debug (fun m -> m "POST %a" Uri.pp_hum uri) |> Lwt_result.ok >>= fun () ->
+        Logs_lwt.debug ~src:log_src_pull (fun m -> m "POST %a" Uri.pp_hum uri) |> Lwt_result.ok >>= fun () ->
         Cohttp_lwt_unix.Client.post uri ~headers ~body
         |> Lwt_result.ok
       )
