@@ -87,6 +87,8 @@ end
 type error =
   [ `Bad_token_response of string
   | `Bad_credentials_format
+  | `Bad_credentials_priv_key of string
+  | `Jwt_signing_error of string
   | `No_credentials
   | `No_project_id
   | Compute_engine.Metadata.error
@@ -98,6 +100,10 @@ let pp_error fmt (error : error) =
     Format.fprintf fmt "Unexpected format for access_token: %S" body_str
   | `Bad_credentials_format ->
     Format.fprintf fmt "Unexpected format for credentials"
+  | `Bad_credentials_priv_key msg ->
+    Format.fprintf fmt "Could not decode private key from credentials: %s" msg
+  | `Jwt_signing_error msg ->
+    Format.fprintf fmt "Could not sign JWT: %s" msg
   | `No_credentials ->
     Format.fprintf fmt "Could not discover credentials"
   | `No_project_id ->
@@ -233,7 +239,7 @@ let access_token_of_response (resp, body : Cohttp.Response.t * Cohttp_lwt.Body.t
 
 let access_token_of_credentials (scopes : string list) (credentials : credentials)
   : (access_token, [> `Bad_token_response of string ]) result Lwt.t =
-  let open Lwt.Infix in
+  let open Lwt_result.Infix in
   let request =
     match credentials with
     | Authorized_user c ->
@@ -250,36 +256,44 @@ let access_token_of_credentials (scopes : string list) (credentials : credential
         ]
       in
       Cohttp_lwt_unix.Client.post_form token_uri ~params
+      |> Lwt_result.ok
     | Service_account c ->
-      let key =
-        Cstruct.of_string c.private_key
-        |> X509.Encoding.Pem.Private_key.of_pem_cstruct1
-      in
-      Nocrypto_entropy_lwt.initialize () >>= fun () ->
+      Cstruct.of_string c.private_key
+      |> X509.Private_key.decode_pem
+      |> CCResult.map_err (function
+          | `Msg msg -> `Bad_credentials_priv_key msg)
+      |> Lwt.return
+      >>= fun (`RSA priv) ->
+      (* Nocrypto_entropy_lwt.initialize () >>= fun () -> *)
       let now = Unix.time () in
-      let header = Jwt.(header_of_algorithm_and_typ (RS256 (match key with | `RSA k -> Some k)) (Some "JWT")) in
+      let jwk = Jose.Jwk.make_priv_rsa priv in
+      let header = Jose.Header.make_header ~typ:"JWT" jwk in
       let payload =
-        Jwt.empty_payload
-        |> Jwt.add_claim Jwt.iss c.client_email
-        |> Jwt.add_claim (Jwt.claim "scope") (String.concat " " scopes)
-        |> Jwt.add_claim Jwt.aud c.token_uri
-        |> Jwt.add_claim Jwt.iat (Printf.sprintf "%.0f" now)
-        |> Jwt.add_claim Jwt.exp (Printf.sprintf "%.0f" (now +. 3600.))
+        Jose.Jwt.empty_payload
+        |> Jose.Jwt.add_claim "iss" (`String c.client_email)
+        |> Jose.Jwt.add_claim "scope" (`String (String.concat " " scopes))
+        |> Jose.Jwt.add_claim "aud" (`String c.token_uri)
+        |> Jose.Jwt.add_claim "iat" (`String (Printf.sprintf "%.0f" now))
+        |> Jose.Jwt.add_claim "exp" (`String (Printf.sprintf "%.0f" (now +. 3600.)))
       in
-      let jwt = Jwt.t_of_header_and_payload header payload in
-      let token = Jwt.token_of_t jwt in
+      Jose.Jwt.sign ~header ~payload jwk
+      |> CCResult.map_err (function
+          | `Msg msg -> `Jwt_signing_error msg)
+      |> Lwt.return >>= fun jwt ->
       let params =
         [ ( "grant_type", [ "urn:ietf:params:oauth:grant-type:jwt-bearer" ] )
-        ; ( "assertion", [ token ] )
+        ; ( "assertion", [ Jose.Jwt.to_string jwt ] )
         ]
       in
       Cohttp_lwt_unix.Client.post_form (Uri.of_string c.token_uri) ~params
+      |> Lwt_result.ok
     | GCE_metadata ->
       let uri =
         Printf.sprintf "%s/instance/service-accounts/default/token" Compute_engine.Metadata.metadata_root
         |> Uri.of_string
       in
       Cohttp_lwt_unix.Client.get uri ~headers:Compute_engine.Metadata.metadata_headers
+      |> Lwt_result.ok
   in
   request >>= access_token_of_response
 
