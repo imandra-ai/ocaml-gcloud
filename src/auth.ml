@@ -142,20 +142,20 @@ type token_info =
 let token_info_mvar : token_info option Lwt_mvar.t =
   Lwt_mvar.create None
 
-let access_token_of_json (json : Yojson.Basic.json) : access_token =
+let access_token_of_json (json : Yojson.Basic.t) : access_token =
   let open Yojson.Basic.Util in
   let access_token = json |> member "access_token" |> to_string in
   let expires_in = json |> member "expires_in" |> to_int in
   { access_token; expires_in }
 
-let authorized_user_credentials_of_json (json : Yojson.Basic.json) : user_refresh_credentials =
+let authorized_user_credentials_of_json (json : Yojson.Basic.t) : user_refresh_credentials =
   let open Yojson.Basic.Util in
   let client_id = json |> member "client_id" |> to_string in
   let client_secret = json |> member "client_secret" |> to_string in
   let refresh_token = json |> member "refresh_token" |> to_string in
   { client_id; client_secret; refresh_token }
 
-let service_account_credentials_of_json (json : Yojson.Basic.json) : service_account_credentials =
+let service_account_credentials_of_json (json : Yojson.Basic.t) : service_account_credentials =
   let open Yojson.Basic.Util in
   let client_email = json |> member "client_email" |> to_string in
   let private_key = json |> member "private_key" |> to_string in
@@ -163,7 +163,7 @@ let service_account_credentials_of_json (json : Yojson.Basic.json) : service_acc
   let token_uri = json |> member "token_uri" |> to_string in
   { client_email; private_key; project_id; token_uri }
 
-let credentials_of_json (json : Yojson.Basic.json) : credentials =
+let credentials_of_json (json : Yojson.Basic.t) : credentials =
   let open Yojson.Basic.Util in
   let cred_type = json |> member "type" |> to_string in
   match cred_type with
