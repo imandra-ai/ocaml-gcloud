@@ -126,7 +126,7 @@ module Subscriptions = struct
       let received_messages =
         received_messages
         |> List.map (fun ({message;_} as msg) ->
-            { msg with message = { message with data = B64.decode message.data} } )
+            { msg with message = { message with data = Base64.decode_exn message.data} } )
       in
       { received_messages }
     | x ->
