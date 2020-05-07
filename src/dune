@@ -4,13 +4,13 @@
  (preprocess (pps ppx_deriving.std ppx_deriving_yojson))
  (libraries base64
             cohttp
-            cohttp.lwt
+            cohttp-lwt
+            cohttp-lwt-unix
             containers
             cstruct
-            jwt
+            jose
             logs
             logs.lwt
-            nocrypto.lwt
             ppx_deriving_yojson.runtime
             x509
             yojson

@@ -12,25 +12,7 @@
     "source": "./gcloud.opam",
     "override": {
         "resolutions": {
-            "@opam/jwt": "aestheticintegration/ocaml-jwt:jwt.opam#6a4640d7ede667e3f2040fe7c1ce68f0cbdad386",
-            "@opam/nocrypto": "mirleft/ocaml-nocrypto:opam#ed7bb8d911dc340e36d85d335d9edb8339f0932d",
-            "@opam/ppx_sexp_conv": {
-                "source": "janestreet/ppx_sexp_conv:ppx_sexp_conv.opam#1ec36f1bd43755945c2b8ec43270257f5d272a69",
-                "override": {
-                    "dependencies": {
-                        "@opam/ppx_deriving": "4.2.1"
-                    }
-                }
-            },
-            "@opam/cohttp": "opam:1.1.1",
-            "@opam/cohttp-lwt": "opam:1.1.1",
-            "@opam/cohttp-lwt-unix": "opam:1.1.1",
-            "@opam/conduit": "opam:1.1.0",
-            "@opam/conduit-lwt": "opam:1.1.0",
-            "@opam/conduit-lwt-unix": "opam:1.1.0",
-            "@opam/x509": "opam:0.6.1",
-            "@opam/yojson": "opam:1.5.0",
-            "@opam/ppx_deriving_yojson": "opam:3.3"
+            "ocaml": "4.08.1000"
         }
     }
 }

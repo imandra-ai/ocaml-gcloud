@@ -1,4 +1,4 @@
-let tests : unit Alcotest.test_case list =
+let tests : unit Alcotest_lwt.test_case list =
   [
     (* Manually tested *)
     (* Alcotest_lwt.test_case "firewalls" `Quick *)

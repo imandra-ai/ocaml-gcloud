@@ -1,4 +1,4 @@
-let tests : unit Alcotest.test_case list =
+let tests : unit Alcotest_lwt.test_case list =
   [Alcotest_lwt.test_case "report" `Quick
       (fun _ () ->
           let open Lwt.Infix in

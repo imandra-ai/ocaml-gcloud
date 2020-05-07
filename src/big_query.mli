@@ -20,7 +20,7 @@ module Schema : sig
 
   type field
   val make_field : name:string -> ?description:string option -> mode:mode -> bq_type:bq_type -> ?fields:field list -> unit -> field
-  val field_to_yojson : field -> Yojson.Safe.json
+  val field_to_yojson : field -> Yojson.Safe.t
   val bq_type_of_field : field -> bq_type
   val name_of_field : field -> string
   val mode_of_field : field -> mode
@@ -118,7 +118,7 @@ module Jobs : sig
     ; job_complete : query_response_data option
     }
 
-  val query_response_to_yojson : query_response -> Yojson.Safe.json
+  val query_response_to_yojson : query_response -> Yojson.Safe.t
 
   val query : ?project_id:string -> ?use_legacy_sql:bool -> ?params:Param.query_parameter list -> ?location:string -> string -> (query_response, [> Error.t ]) Lwt_result.t
   val get_query_results : ?page_token:string -> job_reference -> (query_response, [> Error.t ]) Lwt_result.t
@@ -129,7 +129,7 @@ module Jobs : sig
     ; job_reference : job_reference
     ; data : query_response_data
     }
-  val query_response_complete_to_yojson : query_response_complete -> Yojson.Safe.json
+  val query_response_complete_to_yojson : query_response_complete -> Yojson.Safe.t
 
   val poll_until_complete : ?attempts:int -> query_response -> (query_response_complete, [> Error.t ]) result Lwt.t
 

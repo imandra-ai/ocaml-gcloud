@@ -237,9 +237,9 @@ module Jobs = struct
     let with_field ~name type_ struct_ =
       FIELD ((name, type_), struct_)
 
-    let rec struct_param_type_to_yojson : type a. a struct_param -> Yojson.Safe.json =
+    let rec struct_param_type_to_yojson : type a. a struct_param -> Yojson.Safe.t =
       fun struct_param ->
-        let rec go : type a. a struct_param -> Yojson.Safe.json list =
+        let rec go : type a. a struct_param -> Yojson.Safe.t list =
           function
           | EMPTY -> []
           | FIELD ((name, param'), struct_param') ->
@@ -253,7 +253,7 @@ module Jobs = struct
           ; ( "structTypes", `List (go struct_param) )
           ]
 
-    and param'_type_to_yojson : type a. a param' -> Yojson.Safe.json =
+    and param'_type_to_yojson : type a. a param' -> Yojson.Safe.t =
       let scalar_json value =
         `Assoc
           [ ( "type", value )]
@@ -275,13 +275,13 @@ module Jobs = struct
                  (fun p -> [ ( "arrayType", param'_type_to_yojson p ) ])
              ])
 
-    let param_type_to_yojson : param -> Yojson.Safe.json =
+    let param_type_to_yojson : param -> Yojson.Safe.t =
       function
       | P param' -> param'_type_to_yojson param'
 
-    let rec struct_param_value_to_yojson : type a. a struct_param -> Yojson.Safe.json =
+    let rec struct_param_value_to_yojson : type a. a struct_param -> Yojson.Safe.t =
       fun struct_param ->
-        let rec go : type a. a struct_param -> (string * Yojson.Safe.json) list =
+        let rec go : type a. a struct_param -> (string * Yojson.Safe.t) list =
           function
           | EMPTY -> []
           | FIELD ((name, param'), struct_param') ->
@@ -293,7 +293,7 @@ module Jobs = struct
             )
           ]
 
-    and param'_value_to_yojson : type a. a param' -> Yojson.Safe.json =
+    and param'_value_to_yojson : type a. a param' -> Yojson.Safe.t =
       let scalar_json value = `Assoc [ ( "value", value )] in
       function
       | P_BOOL b -> scalar_json (`Bool b)
@@ -309,7 +309,7 @@ module Jobs = struct
           [ ( "arrayValues", `List (CCList.map param'_value_to_yojson array_field_params) )
           ]
 
-    let param_value_to_yojson : param -> Yojson.Safe.json =
+    let param_value_to_yojson : param -> Yojson.Safe.t =
       function
       | P param' -> param'_value_to_yojson param'
 
@@ -417,7 +417,7 @@ module Jobs = struct
     ; job_complete : query_response_data option
     }
 
-  let query_response_of_yojson (json : Yojson.Safe.json) : (query_response, string) result =
+  let query_response_of_yojson (json : Yojson.Safe.t) : (query_response, string) result =
     CCResult.(
       query_response'_of_yojson json >>= fun query_response' ->
       let query_response =
@@ -436,7 +436,7 @@ module Jobs = struct
         return query_response
     )
 
-  let query_response_data_to_yojsons (data : query_response_data) : (string * Yojson.Safe.json) list =
+  let query_response_data_to_yojsons (data : query_response_data) : (string * Yojson.Safe.t) list =
     List.concat
       [ [ ( "schema", query_response_schema_to_yojson data.schema )
         ; ( "rows", `List (List.map query_response_row_to_yojson data.rows) )
@@ -451,7 +451,7 @@ module Jobs = struct
           (fun t -> [ ( "pageToken", `String t ) ])
       ]
 
-  let query_response_to_yojson (query_response : query_response) : Yojson.Safe.json =
+  let query_response_to_yojson (query_response : query_response) : Yojson.Safe.t =
     `Assoc
       (List.concat
          [ [ ( "kind", `String query_response.kind )
@@ -484,7 +484,7 @@ module Jobs = struct
     ; data : query_response_data
     }
 
-  let query_response_complete_to_yojson (query_response_complete : query_response_complete) : Yojson.Safe.json =
+  let query_response_complete_to_yojson (query_response_complete : query_response_complete) : Yojson.Safe.t =
     `Assoc
       (List.concat
          [ [ ( "kind", `String query_response_complete.kind )

@@ -21,7 +21,7 @@ module V1 = struct
                     Printf.sprintf "v1/projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s:decrypt"
                       token_info.project_id location key_ring crypto_key)
               in
-              let b64_encoded = B64.encode ~alphabet:B64.uri_safe_alphabet ciphertext in
+              let b64_encoded = Base64.encode_exn ~alphabet:Base64.uri_safe_alphabet ciphertext in
               let body =
                 `Assoc [("ciphertext", `String b64_encoded)]
                 |> Yojson.Safe.to_string
@@ -44,7 +44,7 @@ module V1 = struct
             Error.parse_body_json
               (function
                 | `Assoc [("plaintext", `String plaintext)] ->
-                  begin try Ok (B64.decode ~alphabet:B64.uri_safe_alphabet plaintext) with
+                  begin try Ok (Base64.decode_exn ~alphabet:Base64.uri_safe_alphabet plaintext) with
                     | Not_found -> Error "Could not base64-decode the plaintext"
                   end
                 | _ -> Error "Expected an object with field 'plaintext'")

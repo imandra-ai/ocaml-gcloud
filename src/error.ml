@@ -29,7 +29,7 @@ type t =
   | `Gcloud_api_error of Cohttp.Code.status_code * api_error_response
   | `Gcloud_retry_timeout of string
   | `Json_parse_error of (string * string) (* error, raw json *)
-  | `Json_transform_error of (string * Yojson.Safe.json) (* error, raw json *)
+  | `Json_transform_error of (string * Yojson.Safe.t) (* error, raw json *)
   | `Network_error of exn
   ]
 
@@ -52,7 +52,7 @@ let pp fmt (error : t) =
   | `Network_error exn ->
     Format.fprintf fmt "Network error: %s" (Printexc.to_string exn)
 
-let parse_body_json (transform : Yojson.Safe.json -> ('a, string) result) (body : Cohttp_lwt.Body.t) : ('a, [> t]) Lwt_result.t =
+let parse_body_json (transform : Yojson.Safe.t -> ('a, string) result) (body : Cohttp_lwt.Body.t) : ('a, [> t]) Lwt_result.t =
   let open Lwt.Infix in
   Cohttp_lwt.Body.to_string body >>= fun body_str ->
   let parse_result = try

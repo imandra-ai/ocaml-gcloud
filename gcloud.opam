@@ -5,29 +5,24 @@ maintainer: "Matt Bray <matt@aestheticintegration.com>"
 author: "Matt Bray <matt@aestheticintegration.com>"
 homepage: "https://github.com/aestheticintegration/ocaml-gcloud"
 bug-reports: "https://github.com/aestheticintegration/ocaml-gcloud/issues"
+synopsis: "Bindings to Google Cloud Platform APIs"
 build: [["dune" "build" "-p" name "-j" jobs]]
 depends: [
   "alcotest" {test}
   "alcotest-lwt" {test}
-  "dune" {build}
   "base64"
   "cohttp"
   "cohttp-lwt-unix"
   "containers"
   "cstruct"
-  "cstruct-lwt"
-  "jwt"
+  "dune"
+  "jose"
   "logs"
   "lwt"
   "lwt_ssl"
-  "nocrypto"
-  "ppx_deriving"
   "ppx_deriving_yojson"
   "ppx_here" {test}
-  "ptime" {test}
-  "sexplib" {< "v0.11.0"}
-  "ssl" {= "0.5.5"}
+  "ssl"
   "x509"
   "yojson"
-  "ppx_sexp_conv" {< "v0.11.0"}
 ]
