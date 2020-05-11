@@ -258,15 +258,12 @@ let access_token_of_credentials (scopes : string list) (credentials : credential
       Cohttp_lwt_unix.Client.post_form token_uri ~params
       |> Lwt_result.ok
     | Service_account c ->
-      Cstruct.of_string c.private_key
-      |> X509.Private_key.decode_pem
-      |> CCResult.map_err (function
-          | `Msg msg -> `Bad_credentials_priv_key msg)
-      |> Lwt.return
-      >>= fun (`RSA priv) ->
-      (* Nocrypto_entropy_lwt.initialize () >>= fun () -> *)
       let now = Unix.time () in
-      let jwk = Jose.Jwk.make_priv_rsa priv in
+      Jose.Jwk.of_priv_pem c.private_key
+      |> CCResult.map_err (function
+          | `Msg msg -> `Bad_credentials_priv_key msg
+          | `Not_rsa -> `Bad_credentials_priv_key "Not RSA")
+      |> Lwt.return >>= fun jwk ->
       let header = Jose.Header.make_header ~typ:"JWT" jwk in
       let payload =
         Jose.Jwt.empty_payload
