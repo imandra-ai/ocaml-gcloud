@@ -2,7 +2,7 @@
  (name test_main)
  (modules test_main)
  (preprocess (pps ppx_here))
- (libraries alcotest alcotest-lwt gcloud_tests))
+ (libraries alcotest alcotest-lwt gcloud_tests logs.fmt mirage-crypto-rng.unix))
 
 (library
  (name gcloud_tests)
