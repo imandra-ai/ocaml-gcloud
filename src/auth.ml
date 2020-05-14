@@ -259,11 +259,15 @@ let access_token_of_credentials (scopes : string list) (credentials : credential
       |> Lwt_result.ok
     | Service_account c ->
       let now = Unix.time () in
-      Jose.Jwk.of_priv_pem c.private_key
-      |> CCResult.map_err (function
-          | `Msg msg -> `Bad_credentials_priv_key msg
-          | `Not_rsa -> `Bad_credentials_priv_key "Not RSA")
-      |> Lwt.return >>= fun jwk ->
+      Cstruct.of_string c.private_key
+      |> X509.Private_key.decode_pem
+        (* Some Gcloud RSA private keys have an invalid [d]. [sloppy:true]
+           will re-create the key from the primes [e], [p] and [q] if that is
+           the case. *)
+        ~sloppy:true
+      |> CCResult.map_err (function `Msg msg -> `Bad_credentials_priv_key msg)
+      |> Lwt.return >>= fun (`RSA priv_key) ->
+      let jwk = Jose.Jwk.make_priv_rsa priv_key in
       let header = Jose.Header.make_header ~typ:"JWT" jwk in
       let payload =
         Jose.Jwt.empty_payload
