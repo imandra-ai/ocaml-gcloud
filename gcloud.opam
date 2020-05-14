@@ -23,6 +23,6 @@ depends: [
   "ppx_deriving_yojson"
   "ppx_here" {test}
   "ssl"
-  "x509"
+  "x509" { >= "0.11.2" } # Required for the ~sloppy arg
   "yojson"
 ]
