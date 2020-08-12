@@ -218,7 +218,7 @@ module Jobs = struct
       | P_TIME : string -> time param'
       | P_TIMESTAMP : string -> timestamp param'
       | P_STRUCT : 'a struct_param -> 'a param'
-      | P_ARRAY : 'a param' list -> 'a param'
+      | P_ARRAY : Schema.bq_type * 'a param' list -> 'a param'
 
     type param =
       | P : 'a param' -> param
@@ -230,7 +230,7 @@ module Jobs = struct
     let date s = P_DATE s
     let time s = P_TIME s
     let timestamp s = P_TIMESTAMP s
-    let array f xs = P_ARRAY (CCList.map f xs)
+    let array ?(default_type=Schema.STRING) f xs = P_ARRAY (default_type, CCList.map f xs)
 
     let struct_ s = P_STRUCT s
     let empty_struct = EMPTY
@@ -267,13 +267,18 @@ module Jobs = struct
       | P_TIME _ -> scalar_json (Schema.bq_type_to_yojson Schema.TIME)
       | P_TIMESTAMP _ -> scalar_json (Schema.bq_type_to_yojson Schema.TIMESTAMP)
       | P_STRUCT struct_param -> struct_param_type_to_yojson struct_param
-      | P_ARRAY array_field_params ->
+      | P_ARRAY (default_type, array_field_params) ->
+        let array_type =
+          array_field_params
+          |> CCList.head_opt
+          |> CCOpt.map_or
+            ~default:(scalar_json (Schema.bq_type_to_yojson default_type))
+            param'_type_to_yojson
+        in
         `Assoc
-          (List.concat
-             [ [ ( "type", `String "ARRAY" ) ]
-             ; array_field_params |> CCList.head_opt |> CCOpt.map_or ~default:[]
-                 (fun p -> [ ( "arrayType", param'_type_to_yojson p ) ])
-             ])
+          [ ( "type", `String "ARRAY" )
+          ; ( "arrayType", array_type )
+          ]
 
     let param_type_to_yojson : param -> Yojson.Safe.t =
       function
@@ -304,7 +309,7 @@ module Jobs = struct
       | P_TIME d -> scalar_json (`String d)
       | P_TIMESTAMP d -> scalar_json (`String d)
       | P_STRUCT struct_param -> struct_param_value_to_yojson struct_param
-      | P_ARRAY array_field_params ->
+      | P_ARRAY (_, array_field_params) ->
         `Assoc
           [ ( "arrayValues", `List (CCList.map param'_value_to_yojson array_field_params) )
           ]

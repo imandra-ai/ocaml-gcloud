@@ -66,7 +66,7 @@ module Jobs : sig
     val date : string -> date param'
     val time : string -> time param'
     val timestamp : string -> timestamp param'
-    val array : ('a -> 'b param') -> 'a list -> 'b param'
+    val array : ?default_type:Schema.bq_type -> ('a -> 'b param') -> 'a list -> 'b param'
 
     type 'a struct_param
     val struct_ : 'a struct_param -> 'a param'
