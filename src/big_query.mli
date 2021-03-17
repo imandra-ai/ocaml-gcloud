@@ -23,7 +23,9 @@ module Schema : sig
   val field_to_yojson : field -> Yojson.Safe.t
   val bq_type_of_field : field -> bq_type
   val name_of_field : field -> string
+  val description_of_field : field -> string option
   val mode_of_field : field -> mode
+  val fields_of_field : field -> field list
 end
 
 module Datasets : sig

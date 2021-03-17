@@ -55,7 +55,9 @@ module Schema = struct
 
   let bq_type_of_field field = field.bq_type
   let name_of_field field = field.name
+  let description_of_field field = field.description
   let mode_of_field field = field.mode
+  let fields_of_field field = field.fields
 end
 
 module Datasets = struct
