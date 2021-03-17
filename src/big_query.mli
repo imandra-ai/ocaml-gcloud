@@ -123,8 +123,8 @@ module Jobs : sig
 
   val query_response_to_yojson : query_response -> Yojson.Safe.t
 
-  val query : ?project_id:string -> ?use_legacy_sql:bool -> ?params:Param.query_parameter list -> ?location:string -> string -> (query_response, [> Error.t ]) Lwt_result.t
-  val get_query_results : ?page_token:string -> job_reference -> (query_response, [> Error.t ]) Lwt_result.t
+  val query : ?project_id:string -> ?use_legacy_sql:bool -> ?params:Param.query_parameter list -> ?location:string -> ?use_int64_timestamp:bool -> string -> (query_response, [> Error.t ]) Lwt_result.t
+  val get_query_results : ?page_token:string -> ?use_int64_timestamp:bool -> job_reference -> (query_response, [> Error.t ]) Lwt_result.t
 
   (** Type of query responses, when the job is complete and we definitely have some data. *)
   type query_response_complete =

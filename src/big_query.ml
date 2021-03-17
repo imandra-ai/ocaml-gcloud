@@ -343,6 +343,11 @@ module Jobs = struct
     `String (show_parameter_mode m)
 
   [@@@warning "-39"]
+
+  type data_format_options =
+    { use_int64_timestamp : bool [@key "useInt64Timestamp"] }
+  [@@deriving to_yojson]
+
   type query_request =
     { kind : string
     ; query : string
@@ -350,6 +355,7 @@ module Jobs = struct
     ; location : string
     ; query_parameters : Param.query_parameter list [@key "queryParameters"]
     ; parameter_mode : parameter_mode option [@key "parameterMode"] [@default None]
+    ; format_options : data_format_options option [@key "formatOptions"] [@default None]
     }
   [@@deriving to_yojson]
 
@@ -608,12 +614,17 @@ module Jobs = struct
   let tag msg result =
     result |> CCResult.map_err (CCFormat.sprintf "%s: %s" msg)
 
-  let query ?project_id ?(use_legacy_sql=false) ?(params = []) ?(location = "EU") q : (query_response, [> Error.t ]) Lwt_result.t =
+  let query ?project_id ?(use_legacy_sql=false) ?(params = []) ?(location = "EU")
+    ?use_int64_timestamp q : (query_response, [> Error.t ]) Lwt_result.t =
     let parameter_mode =
       if use_legacy_sql || params = [] then
         None
       else
         Some NAMED
+    in
+
+    let format_options = 
+      use_int64_timestamp |> CCOpt.map (fun use_int64_timestamp -> { use_int64_timestamp })
     in
 
     let request =
@@ -623,6 +634,7 @@ module Jobs = struct
       ; location
       ; parameter_mode = parameter_mode
       ; query_parameters = params
+      ; format_options
       }
     in
 
@@ -681,19 +693,26 @@ module Jobs = struct
     | status_code ->
       Error.of_response_status_code_and_body status_code body
 
-  let get_query_results ?(page_token) (job_reference : job_reference) : (query_response, [> Error.t]) Lwt_result.t =
+  let get_query_results ?(page_token) ?use_int64_timestamp (job_reference : job_reference) : (query_response, [> Error.t]) Lwt_result.t =
     let open Lwt_result.Infix in
 
     Auth.get_access_token ~scopes:[Scopes.bigquery] ()
     |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
 
+    let query =
+      [ page_token |> CCOpt.map (fun page_token -> ("pageToken", [page_token])) 
+      ; use_int64_timestamp |> CCOpt.map (fun b -> ("formatOptions.useInt64Timestamp", [string_of_bool b]))
+      ]
+      |> CCList.filter_map CCFun.id
+    in
+
     let uri =
       Uri.make ()
         ~scheme:"https"
         ~host:"www.googleapis.com"
         ~path:(Printf.sprintf "bigquery/v2/projects/%s/queries/%s" job_reference.project_id job_reference.job_id)
-        ~query:(page_token |> CCOpt.map (fun page_token -> ("pageToken", [page_token])) |> CCOpt.to_list)
+        ~query
     in
     let headers =
       Cohttp.Header.of_list
