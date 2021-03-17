@@ -89,15 +89,16 @@ module Jobs : sig
   type query_response_schema =
     { fields : Schema.field list}
 
-  type query_response_field =
-    { v : query_response_value }
-  and query_response_value =
+  type value =
     | Null
-    | String of string
-    | List of query_response_field list
+    | String of string 
+    | Number of float
+    | Bool of bool
+    | List of value list
+    | Field of value list
 
   type query_response_row =
-    { f : query_response_field list}
+    { f : value list}
 
   type query_response_data =
     { schema : query_response_schema
@@ -137,14 +138,21 @@ module Jobs : sig
 
   val fetch_all_rows : query_response_complete -> (query_response_complete, [> Error.t ]) Lwt_result.t
 
-  val single_row : (query_response_row -> ('a, string) result) -> query_response_data -> ('a, string) result
-  val many_rows : (query_response_row -> ('a, string) result) -> query_response_data -> ('a list, string) result
-  val single_field : (query_response_field -> ('a, string) result) -> query_response_row -> ('a, string) result
-  val string : query_response_field -> (string, string) result
-  val int : query_response_field -> (int, string) result
-  val bool : query_response_field -> (bool, string) result
-  val float : query_response_field -> (float, string) result
-  val nullable : (query_response_field -> ('a, string) result) -> query_response_field -> ('a option, string) result
-  val list : (query_response_field -> ('a, string) result) -> query_response_field -> ('a list, string) result
+  type ('a, 'b) decoder =  'a -> ('b, string) result
+  type 'a data_decoder = (query_response_data, 'a) decoder 
+  type 'a row_decoder =  (query_response_row, 'a) decoder
+  type 'a value_decoder = (value, 'a) decoder
+
   val tag : string -> ('a, string) result -> ('a, string) result
+
+  val single_row : 'a row_decoder -> 'a data_decoder
+  val many_rows : 'a row_decoder -> 'a list data_decoder
+  val single_field : 'a value_decoder -> 'a row_decoder
+
+  val string : string value_decoder
+  val int : int value_decoder
+  val bool : bool value_decoder 
+  val float : float value_decoder
+  val nullable : 'a value_decoder -> 'a option value_decoder
+  val list : 'a value_decoder -> 'a list value_decoder
 end

@@ -364,40 +364,82 @@ module Jobs = struct
     { fields : Schema.field list}
   [@@deriving yojson]
 
-  type query_response_field =
-    { v : query_response_value }
-  and query_response_value =
+  let map_result_l_i f xs =
+    let rec go acc i = function
+      | x :: xs ->
+        begin match f i x with
+          | Ok y -> go (y :: acc) (i+1) xs
+          | Error e -> Error e
+        end
+      | [] -> Ok (List.rev acc)
+    in
+    go [] 0 xs
+
+  type value =
     | Null
-    | String of string
-    | List of query_response_field list
+    | String of string 
+    | Number of float
+    | Bool of bool
+    | List of value list
+    | Field of value list
 
-  let rec query_response_field_of_yojson = function
-    | `Assoc [("v", value_json)] ->
-      CCResult.Infix.(
-        query_response_value_of_yojson value_json >>= fun v ->
-        Ok { v }
-      )
-    | _ -> Error "query_response_field_of_yojson"
-  and query_response_value_of_yojson = function
-    | `Null -> Ok Null
-    | `String s -> Ok (String s)
-    | `List jsons ->
-       jsons
-       |> CCResult.map_l query_response_field_of_yojson
-       |> CCResult.map (fun fields -> List fields)
-    | _ -> Error "query_response_value_of_yojson"
+  let value_of_yojson json =
+    let rec aux =
+      function
+      | `Null -> Ok Null
+      | `String s -> Ok (String s)
+      | `Float f -> Ok (Number f)
+      | `Bool b -> Ok (Bool b) 
+      | `List jsons ->
+        jsons
+        |> map_result_l_i (fun i json ->
+          aux json
+          |> CCResult.map_err (fun msg -> CCFormat.sprintf "element %i: %s" i msg))
+        |> CCResult.map_err (fun msg -> "in list: " ^ msg)
+        |> CCResult.map (fun values -> List values )
+      | `Assoc [("f", `List jsons)] ->
+        jsons
+        |> map_result_l_i (fun i json ->
+          let result =
+            match json with 
+            | `Assoc [("v", json)] -> aux json
+            | _ -> Error {|expected an object like { "v": value }|}
+          in
+          result
+          |> CCResult.map_err (fun msg -> CCFormat.sprintf "element %i: %s" i msg))
+        |> CCResult.map_err (fun msg -> "in field: " ^ msg)
+        |> CCResult.map (fun values ->  Field values )
+      | _ -> Error {|expected a value|}
+    in
+    aux json
+    |> CCResult.map_err (fun msg -> "value_of_yojson: " ^ msg)
 
-  let rec query_response_field_to_yojson field =
-    `Assoc [("v", query_response_value_to_yojson field.v)]
-  and query_response_value_to_yojson = function
-    | Null -> `Null
+
+  let rec value_to_yojson = function 
+    | Null -> `Null 
     | String s -> `String s
-    | List fields ->
-      `List (fields |> CCList.map query_response_field_to_yojson)
+    | Number f -> `Float f
+    | Bool b -> `Bool b
+    | List vs -> `List (CCList.map value_to_yojson vs)
+    | Field vs -> 
+      `Assoc [("f", `List (CCList.map (fun v -> `Assoc [("v", value_to_yojson v)]) vs))]
+
 
   type query_response_row =
-    { f : query_response_field list}
-  [@@deriving yojson]
+    { f : value list }
+
+  let query_response_row_of_yojson json = 
+    let result =
+      value_of_yojson json
+      |> CCResult.flat_map (function
+        | Field values -> Ok { f = values }
+        | _ -> Error "expected a field")
+    in
+    result
+    |> CCResult.map_err (fun msg -> "in query_response_row_of_yojson: " ^ msg)
+
+  let query_response_row_to_yojson { f = values } = 
+    value_to_yojson (Field values)
 
   type query_response_data =
     { schema : query_response_schema
@@ -501,71 +543,67 @@ module Jobs = struct
          ; query_response_data_to_yojsons query_response_complete.data
          ])
 
-  let map_result_l_i f xs =
-    let rec go acc i = function
-      | x :: xs ->
-        begin match f i x with
-          | Ok y -> go (y :: acc) (i+1) xs
-          | Error e -> Error e
-        end
-      | [] -> Ok (List.rev acc)
-    in
-    go [] 0 xs
+  type ('a, 'b) decoder =  'a -> ('b, string) result
+  type 'a data_decoder = (query_response_data, 'a) decoder 
+  type 'a row_decoder =  (query_response_row, 'a) decoder
+  type 'a value_decoder = (value, 'a) decoder
 
-  let single_row (f : query_response_row -> ('a, string) result) (response : query_response_data) : ('a, string) result =
+  let single_row (f : 'a row_decoder) : 'a data_decoder = fun response ->
     match response.rows with
     | [row] ->
       f row
       |> CCResult.map_err (fun msg -> Printf.sprintf "While decoding a single_row: %s" msg)
     | _ -> Error (Printf.sprintf "Expected a single row, but got %d rows" (List.length response.rows))
 
-  let many_rows (f : query_response_row -> ('a, string) result) (response : query_response_data) : ('a list, string) result =
+  let many_rows (f : 'a row_decoder) : 'a list data_decoder = fun response ->
     response.rows
     |> map_result_l_i (fun i row ->
         f row
         |> CCResult.map_err (fun msg -> Printf.sprintf "While decoding row %d: %s" i msg))
 
-  let single_field (f : query_response_field -> ('a, string) result) (row : query_response_row) : ('a, string) result =
+  let single_field (f : 'a value_decoder) : 'a row_decoder = fun row ->
     match row.f with
-    | [field] -> f field
+    | [v] -> 
+      f v
       |> CCResult.map_err (fun msg -> Printf.sprintf "While decoding a single_field: %s" msg)
-    | _ -> Error (Printf.sprintf "Expected row with a single field, but got %d fields" (List.length row.f))
+    | _ ->
+      Error (Printf.sprintf "Expected row with a single field, but got %d fields" (List.length row.f))
 
-  let string (field : query_response_field) : (string, string) result =
-    match field.v with
-    | Null -> Error "Expected a string, but got Null"
-    | List _ -> Error "Expected a string, but got an array"
+  let string : string value_decoder = function
     | String str -> Ok str
+    | _ -> Error "Expected a string"
 
-  let int (field : query_response_field) : (int, string) result =
-    string field
+  let int : int value_decoder = fun v ->
+    string v
     |> CCResult.flat_map (fun str ->
         str |> int_of_string_opt
         |> CCOpt.to_result (CCFormat.sprintf "expected an int, but got %S" str))
 
-  let float (field : query_response_field) : (float, string) result =
-    string field
-    |> CCResult.flat_map (fun str ->
-        str |> float_of_string_opt
-        |> CCOpt.to_result (CCFormat.sprintf "expected a float, but got %S" str))
+  let float : float value_decoder = function
+    | Number f -> Ok f
+    | String str ->
+      str |> float_of_string_opt
+      |> CCOpt.to_result (CCFormat.sprintf "expected a float, but got %S" str)
+    | _ -> Error "expected a float (Number or String)"
 
-  let bool (field : query_response_field) : (bool, string) result =
-    string field
-    |> CCResult.flat_map (fun str ->
-        str |> bool_of_string_opt
-        |> CCOpt.to_result (CCFormat.sprintf "expected a bool, but got %S" str))
+  let bool : bool value_decoder = function
+    | Bool b -> Ok b
+    | String str ->
+      str |> bool_of_string_opt
+      |> CCOpt.to_result (CCFormat.sprintf "expected a bool, but got %S" str)
+    | _ -> Error "expected a bool (Bool or String)"
 
-  let nullable (f : query_response_field -> ('a, string) result) (field : query_response_field) : ('a option, string) result =
-    match field.v with
+  let nullable (f : 'a value_decoder) : 'a option value_decoder = function
     | Null -> Ok None
-    | _ -> f field |> CCResult.map CCOpt.pure
+    | v -> f v |> CCResult.map CCOpt.pure
 
-  let list (f : query_response_field -> ('a, string) result) (field : query_response_field) : ('a list, string) result =
-    match field.v with
-    | Null -> Error "Expected a list, but got Null"
-    | String str -> Error (CCFormat.sprintf "Expected a list, but got: %S" str)
+  let list (f : 'a value_decoder) : 'a list value_decoder = function
     | List vs ->
-      vs |> CCResult.map_l f
+       vs |> map_result_l_i (fun i v ->
+         f v |> CCResult.map_err (fun msg ->
+           CCFormat.sprintf "element %i: %s" i msg))
+      |> CCResult.map_err (fun msg -> CCFormat.sprintf "in list: %s" msg)
+    | _ -> Error "expected a List"
 
   let tag msg result =
     result |> CCResult.map_err (CCFormat.sprintf "%s: %s" msg)
