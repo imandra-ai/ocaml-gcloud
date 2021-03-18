@@ -390,6 +390,11 @@ module Jobs = struct
     | Field of value list
 
   let value_of_yojson json =
+    let wrapped_value decode = 
+      function
+      | `Assoc [("v", json)] -> decode json
+      | _ -> Error {|Expected an object like { "v": value }|}
+    in
     let rec aux =
       function
       | `Null -> Ok Null
@@ -399,19 +404,14 @@ module Jobs = struct
       | `List jsons ->
         jsons
         |> map_result_l_i (fun i json ->
-          aux json
+          wrapped_value aux json
           |> CCResult.map_err (fun msg -> CCFormat.sprintf "element %i: %s" i msg))
         |> CCResult.map_err (fun msg -> "in list: " ^ msg)
         |> CCResult.map (fun values -> List values )
       | `Assoc [("f", `List jsons)] ->
         jsons
         |> map_result_l_i (fun i json ->
-          let result =
-            match json with 
-            | `Assoc [("v", json)] -> aux json
-            | _ -> Error {|expected an object like { "v": value }|}
-          in
-          result
+          wrapped_value aux json
           |> CCResult.map_err (fun msg -> CCFormat.sprintf "element %i: %s" i msg))
         |> CCResult.map_err (fun msg -> "in field: " ^ msg)
         |> CCResult.map (fun values ->  Field values )
@@ -421,14 +421,16 @@ module Jobs = struct
     |> CCResult.map_err (fun msg -> "value_of_yojson: " ^ msg)
 
 
-  let rec value_to_yojson = function 
+  let rec value_to_yojson = 
+    let wrapped_value enc x = `Assoc [("v", enc x)] in
+    function 
     | Null -> `Null 
     | String s -> `String s
     | Number f -> `Float f
     | Bool b -> `Bool b
-    | List vs -> `List (CCList.map value_to_yojson vs)
+    | List vs -> `List (CCList.map (wrapped_value value_to_yojson) vs)
     | Field vs -> 
-      `Assoc [("f", `List (CCList.map (fun v -> `Assoc [("v", value_to_yojson v)]) vs))]
+      `Assoc [("f", `List (CCList.map (wrapped_value value_to_yojson) vs))]
 
 
   type query_response_row =
