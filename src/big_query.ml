@@ -387,7 +387,7 @@ module Jobs = struct
     | Number of float
     | Bool of bool
     | List of value list
-    | Field of value list
+    | Struct of value list
 
   let value_of_yojson json =
     let wrapped_value decode = 
@@ -413,8 +413,8 @@ module Jobs = struct
         |> map_result_l_i (fun i json ->
           wrapped_value aux json
           |> CCResult.map_err (fun msg -> CCFormat.sprintf "element %i: %s" i msg))
-        |> CCResult.map_err (fun msg -> "in field: " ^ msg)
-        |> CCResult.map (fun values ->  Field values )
+        |> CCResult.map_err (fun msg -> "in struct: " ^ msg)
+        |> CCResult.map (fun values -> Struct values )
       | _ -> Error {|expected a value|}
     in
     aux json
@@ -429,7 +429,7 @@ module Jobs = struct
     | Number f -> `Float f
     | Bool b -> `Bool b
     | List vs -> `List (CCList.map (wrapped_value value_to_yojson) vs)
-    | Field vs -> 
+    | Struct vs -> 
       `Assoc [("f", `List (CCList.map (wrapped_value value_to_yojson) vs))]
 
 
@@ -440,14 +440,14 @@ module Jobs = struct
     let result =
       value_of_yojson json
       |> CCResult.flat_map (function
-        | Field values -> Ok { f = values }
-        | _ -> Error "expected a field")
+        | Struct values -> Ok { f = values }
+        | _ -> Error "expected a Struct")
     in
     result
     |> CCResult.map_err (fun msg -> "in query_response_row_of_yojson: " ^ msg)
 
   let query_response_row_to_yojson { f = values } = 
-    value_to_yojson (Field values)
+    value_to_yojson (Struct values)
 
   type query_response_data =
     { schema : query_response_schema

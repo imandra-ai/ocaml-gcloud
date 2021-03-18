@@ -95,7 +95,7 @@ module Jobs : sig
     | Number of float
     | Bool of bool
     | List of value list
-    | Field of value list
+    | Struct of value list
 
   type query_response_row =
     { f : value list}
