@@ -81,6 +81,8 @@ module rec Expression : sig
 
   val ident : string -> t
 
+  val field : t -> string -> t
+
   val param : string -> t
 
   val ( + ) : t -> t -> t
@@ -97,11 +99,22 @@ module rec Expression : sig
 
   val ( || ) : t -> t -> t
 
+  val ands : t list -> t
+  (** Combine [ts] with [&&], or [true] for the empty list *)
+
+  val ands_opt : t list -> t option
+  (** Combine [ts] with [&&], or [None] for the empty list. *)
+
+  val ors : t list -> t
+  (** Combine [ts] with [||], or [true] for the empty list *)
+
   val is_null : t -> t
 
   val is_not_null : t -> t
 
   val ( = ) : t -> t -> t
+
+  val is_not_distinct_from : t -> t -> t
 
   val ( <> ) : t -> t -> t
 
@@ -131,6 +144,8 @@ module rec Expression : sig
 
   val string : string -> t
 
+  val array_lit : t list -> t
+
   val star : t
 
   val count : ?distinct:t -> unit -> t
@@ -148,7 +163,7 @@ module rec Expression : sig
 
   val array : Query_expr.t -> t
 
-  val offset : int -> t -> t
+  val offset : i:t -> t -> t
 
   val exists : Query_expr.t -> t
 
@@ -258,7 +273,9 @@ end = struct
     | Star
     | Identifier of string
     | Value of value
+    | Array_lit of t list
     | Param of string
+    | Field of t * string (** expr.field *)
     | Case of t option * (t * t) list * t option
     | Plus of t * t
     | Minus of t * t
@@ -269,6 +286,7 @@ end = struct
     | Or of t list
     | Is_null of t * bool
     | Equal of t * t
+    | Is_not_distinct_from of t * t
     | Neq of t * t
     | LT of t * t
     | LTE of t * t
@@ -290,7 +308,7 @@ end = struct
     | Extract of date_part * t * string option
     | Query of Query_expr.t
     | Array of Query_expr.t
-    | Offset of t * int
+    | Offset of t * t (** expr[OFFSET(i)] *)
     | Exists of Query_expr.t
 
   and fn_info =
@@ -341,6 +359,10 @@ end = struct
     match e with
     | Raw _ | Star | Identifier _ | Value _ | Param _ ->
         e
+    | Array_lit es ->
+        Array_lit (List.map f es)
+    | Field (e, field) ->
+        Field (f e , field)
     | Case (e, whens, else_) ->
         Case
           ( Util.Opt.map f e
@@ -360,6 +382,8 @@ end = struct
         Is_null (f e, b)
     | Equal (e1, e2) ->
         Equal (f e1, f e2)
+    | Is_not_distinct_from (e1, e2) ->
+        Is_not_distinct_from (f e1, f e2)
     | Neq (e1, e2) ->
         Neq (f e1, f e2)
     | LT (e1, e2) ->
@@ -406,7 +430,9 @@ end = struct
         Exists q
 
 
-  let rec pp fmt = function
+  let rec pp fmt =
+    let open Format in
+    function
     | Raw sql ->
         Format.fprintf fmt "%s" sql
     | Star ->
@@ -417,6 +443,12 @@ end = struct
         Format.fprintf fmt "%s" (sql_of_value v)
     | Param param ->
         Format.fprintf fmt "@%s" param
+    | Array_lit es ->
+        fprintf fmt "@[<hv 1>[ %a@ ]@]"
+          (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt ",@ ") pp) 
+          es
+    | Field (e, field) ->
+        Format.fprintf fmt "%a.%s" pp_parens e field
     | Case (e, whens, else_) ->
         Format.fprintf
           fmt
@@ -448,6 +480,8 @@ end = struct
         Format.fprintf fmt "%a IS%s NULL" pp e (if b then "" else " NOT")
     | Equal (e1, e2) ->
         Format.fprintf fmt "%a = %a" pp e1 pp e2
+    | Is_not_distinct_from (e1, e2) ->
+        Format.fprintf fmt "%a IS NOT DISTINCT FROM %a" pp e1 pp e2
     | Neq (e1, e2) ->
         Format.fprintf fmt "%a <> %a" pp e1 pp e2
     | LT (e1, e2) ->
@@ -558,9 +592,15 @@ end = struct
     | Array q ->
         Format.fprintf fmt "@[<hv 2>ARRAY(@,%a@])" Query_expr.pp q
     | Offset (e, i) ->
-        Format.fprintf fmt "(%a)[OFFSET(%i)]" pp e i
+        Format.fprintf fmt "%a[OFFSET(%a)]" pp_parens e pp i
     | Exists q ->
         Format.fprintf fmt "@[<hv 2>EXISTS (@,%a@])" Query_expr.pp q
+
+  and pp_parens fmt t = 
+    let open Format in
+    match t with
+    | Identifier _ | Star | Field _ -> pp fmt t
+    | _ -> fprintf fmt "(%a)" pp t
 
 
   and pp_type fmt t =
@@ -648,6 +688,8 @@ end = struct
   let rec is_aggregate = function
     | Raw _ | Star | Identifier _ | Value _ | Param _ ->
         false
+    | Array_lit es -> List.exists is_aggregate es
+    | Field (e, _) -> is_aggregate e
     | Case (e, whens, else_) ->
         Util.Opt.map_or ~default:false is_aggregate e
         || List.exists
@@ -667,6 +709,8 @@ end = struct
     | Is_null (e, _) ->
         is_aggregate e
     | Equal (e1, e2) ->
+        is_aggregate e1 || is_aggregate e2
+    | Is_not_distinct_from (e1, e2) ->
         is_aggregate e1 || is_aggregate e2
     | Neq (e1, e2) ->
         is_aggregate e1 || is_aggregate e2
@@ -720,6 +764,8 @@ end = struct
 
   let ident i = Identifier i
 
+  let field e f = Field (e, f)
+
   let param s = Param s
 
   let ( + ) e1 e2 = Plus (e1, e2)
@@ -731,6 +777,8 @@ end = struct
   let ( / ) e1 e2 = Div (e1, e2)
 
   let case ?expr ?else_ whens = Case (expr, whens, else_)
+
+  let bool b = Value (V_bool b)
 
   let ( && ) e1 e2 =
     match (e1, e2) with
@@ -744,6 +792,19 @@ end = struct
         And [ e1; e2 ]
 
 
+  let ands = function
+    | e :: es ->
+        List.fold_left ( && ) e es
+    | [] ->
+        bool true
+
+
+  let ands_opt = function
+    | e :: es ->
+        Some (List.fold_left ( && ) e es)
+    | [] ->
+        None
+
   let ( || ) e1 e2 =
     match (e1, e2) with
     | Or e1s, Or e2s ->
@@ -755,12 +816,21 @@ end = struct
     | e1, e2 ->
         Or [ e1; e2 ]
 
+  let ors = function
+    | e :: es ->
+        List.fold_left ( || ) e es
+    | [] ->
+        bool true
+
+
 
   let is_null e = Is_null (e, true)
 
   let is_not_null e = Is_null (e, false)
 
   let ( = ) e1 e2 = Equal (e1, e2)
+
+  let is_not_distinct_from e1 e2 = Is_not_distinct_from (e1, e2)
 
   let ( <> ) e1 e2 = Neq (e1, e2)
 
@@ -780,8 +850,6 @@ end = struct
 
   let null = Value V_null
 
-  let bool b = Value (V_bool b)
-
   let int x = Value (V_int x)
 
   let zero = int 0
@@ -789,6 +857,8 @@ end = struct
   let float x = Value (V_float x)
 
   let string x = Value (V_string x)
+
+  let array_lit es = Array_lit es
 
   let star = Star
 
@@ -893,7 +963,7 @@ end = struct
 
   let array q = Array q
 
-  let offset i array = Offset (array, i)
+  let offset ~i array = Offset (array, i)
 
   let exists q = Exists q
 end
@@ -972,10 +1042,11 @@ and Query_expr : sig
 
   val cross_join : from_item -> from_item -> from_item
 
-  val unnest : ?as_:string -> Expression.t -> from_item
+  val unnest : ?as_:string -> ?with_offset_as:string -> Expression.t -> from_item
 
   val select :
        ?distinct:bool
+    -> ?as_struct:bool
     -> ?from:from_item
     -> ?where:Expression.t
     -> ?group_by:Expression.t list
@@ -998,7 +1069,7 @@ and Query_expr : sig
 
   val alias_of_select_item : select_item -> string option
 
-  val union_all : t list -> select
+  val union_all : select -> select -> select
 end = struct
   type t =
     { with_ : (string * t) list
@@ -1015,10 +1086,11 @@ end = struct
 
   and select =
     | Select of select_body
-    | Union_all of t list
+    | Union_all of select_body list
 
   and select_body =
     { distinct : bool
+    ; as_struct : bool
     ; expressions : select_item list
     ; from : from_item option
     ; where : Expression.t option
@@ -1036,7 +1108,7 @@ end = struct
     | From_ident of string * string option
     | From_query_expr of t * string option
     | From_join of join
-    | From_unnest of Expression.t * string option
+    | From_unnest of Expression.t * string option (* as *) * string option (* with offset as *)
 
   and join =
     { left : from_item
@@ -1061,8 +1133,8 @@ end = struct
         From_query_expr (t, Some as_)
     | From_join join ->
         From_join join
-    | From_unnest (expression, _) ->
-        From_unnest (expression, Some as_)
+    | From_unnest (expression, _, with_offset_as) ->
+        From_unnest (expression, Some as_, with_offset_as)
 
 
   let rec pp fmt t =
@@ -1120,9 +1192,11 @@ end = struct
       in
       fprintf
         fmt
-        "@[<hv>@[<hv 2>SELECT@ %a%a@]%a%a%a%a@]"
+        "@[<hv>@[<hv 2>SELECT@ %a%a%a@]%a%a%a%a@]"
         (fun fmt distinct -> if distinct then fprintf fmt "DISTINCT " else ())
         select_body.distinct
+        (fun fmt as_struct -> if as_struct then fprintf fmt "AS STRUCT " else ())
+        select_body.as_struct
         (Util.pp_comma_sep_list pp_select_expression)
         select_body.expressions
         (Util.some (fun fmt from_item ->
@@ -1149,7 +1223,7 @@ end = struct
             "%a"
             (Format.pp_print_list
                ~pp_sep:(fun fmt () -> Format.fprintf fmt "@ @[UNION ALL@]@ ")
-               (fun fmt a -> Format.fprintf fmt "@[%a@]" pp a) )
+               (fun fmt a -> Format.fprintf fmt "@[%a@]" pp_select_body a) )
             ts)
 
 
@@ -1182,14 +1256,16 @@ end = struct
           fprintf fmt "(%a)%a" pp t (Util.some pp_alias) alias
       | From_join join ->
           pp_join fmt join
-      | From_unnest (expression, alias) ->
+      | From_unnest (expression, alias, with_offset_as) ->
           fprintf
             fmt
-            "@[<hv 2>UNNEST(@,%a)%a@]"
+            "@[<hv 2>UNNEST(@,%a)%a%a@]"
             Expression.pp
             expression
             (Util.some pp_alias)
-            alias)
+            alias
+            (Util.some (fun fmt as_ -> fprintf fmt " WITH OFFSET AS %s" as_))
+            with_offset_as)
 
 
   and pp_join fmt join =
@@ -1251,11 +1327,17 @@ end = struct
 
   let cross_join right left = join ~type_:CROSS right left
 
-  let unnest ?as_ e = From_unnest (e, as_)
+  let unnest ?as_ ?with_offset_as e = From_unnest (e, as_, with_offset_as)
 
   let select
-      ?(distinct = false) ?from ?where ?(group_by = []) ?having expressions =
-    Select { distinct; expressions; from; where; group_by; having }
+      ?(distinct = false)
+      ?(as_struct = false)
+      ?from
+      ?where
+      ?(group_by = [])
+      ?having
+      expressions =
+    Select { distinct; as_struct; expressions; from; where; group_by; having }
 
 
   let with_ alias ~as_ = (alias, as_)
@@ -1273,5 +1355,10 @@ end = struct
 
   let alias_of_select_item ({ alias; _ } : select_item) : string option = alias
 
-  let union_all selects = Union_all selects
+  let union_all s2 s1 = 
+    let to_list = function
+      | Select s -> [s]
+      | Union_all ss -> ss
+    in
+    Union_all (to_list s1 @ to_list s2)
 end
