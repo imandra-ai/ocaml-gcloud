@@ -334,6 +334,15 @@ module Jobs = struct
         ; ( "parameterType", param_type_to_yojson query_parameter.type_ )
         ; ( "parameterValue", param_value_to_yojson query_parameter.type_ )
         ]
+
+    module Debug = struct
+      let to_string (p: query_parameter): (string * string) =
+        let v = match param_value_to_yojson p.type_ with
+          | `Assoc [("value", v)]  -> Yojson.Safe.to_string v
+          | _ -> failwith "unexpected param JSON"
+        in
+        (p.name,  v)
+    end
   end
 
   type parameter_mode = (* POSITIONAL | *) NAMED

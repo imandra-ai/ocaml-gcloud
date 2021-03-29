@@ -78,6 +78,10 @@ module Jobs : sig
     type query_parameter
 
     val make : name:string -> 'a param' -> query_parameter
+
+    module Debug : sig
+      val to_string: query_parameter -> (string * string)
+    end
   end
 
   type job_reference =
