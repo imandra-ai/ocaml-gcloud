@@ -16,6 +16,7 @@ depends: [
   "containers"
   "cstruct"
   "dune"
+  "ezgzip"
   "jose"
   "logs"
   "lwt"

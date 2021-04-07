@@ -52,11 +52,17 @@ let pp fmt (error : t) =
   | `Network_error exn ->
     Format.fprintf fmt "Network error: %s" (Printexc.to_string exn)
 
-let parse_body_json (transform : Yojson.Safe.t -> ('a, string) result) (body : Cohttp_lwt.Body.t) : ('a, [> t]) Lwt_result.t =
+let parse_body_json ?(gzipped = false) (transform : Yojson.Safe.t -> ('a, string) result) (body : Cohttp_lwt.Body.t) : ('a, [> t]) Lwt_result.t =
   let open Lwt.Infix in
   Cohttp_lwt.Body.to_string body >>= fun body_str ->
+  let body =
+    if gzipped then
+      Ezgzip.decompress body_str
+      |> CCResult.map_err (fun _ -> `Json_parse_error ("gzip decode", "<gzipped>"))
+    else Ok body_str
+  in
   let parse_result = try
-      Ok (body_str |> Yojson.Safe.from_string)
+      body |> CCResult.map Yojson.Safe.from_string
     with
     | Yojson.Json_error msg -> Error (`Json_parse_error (msg, body_str))
     | e -> Error (`Json_parse_error (Printexc.to_string e, body_str))

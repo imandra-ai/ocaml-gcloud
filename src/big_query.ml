@@ -667,6 +667,8 @@ module Jobs = struct
           Cohttp.Header.of_list
             [ ( "Authorization", Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
             ; ( "Content-Type", "application/json" )
+            ; ( "Accept-Encoding", "deflate, gzip" )
+            ; ( "User-Agent", "gzip" )
             ]
         in
         let body_str =
@@ -697,7 +699,7 @@ module Jobs = struct
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
     | `OK ->
-      Error.parse_body_json query_response_of_yojson body >>= fun response ->
+      Error.parse_body_json ~gzipped:true query_response_of_yojson body >>= fun response ->
       Logs_lwt.debug (fun m -> m "%a" pp_query_response response) |> Lwt_result.ok >>= fun () ->
       Lwt_result.return response
 
@@ -727,7 +729,10 @@ module Jobs = struct
     in
     let headers =
       Cohttp.Header.of_list
-        [ ( "Authorization", Printf.sprintf "Bearer %s" token_info.Auth.token.access_token ) ]
+        [ ( "Authorization", Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
+        ; ( "Accept-Encoding", "deflate, gzip" )
+        ; ( "User-Agent", "gzip" )
+        ]
     in
     Lwt.catch (fun () ->
         Cohttp_lwt_unix.Client.get uri ~headers
@@ -737,7 +742,7 @@ module Jobs = struct
 
     match Cohttp.Response.status resp with
     | `OK ->
-      Error.parse_body_json query_response_of_yojson body >>= fun response ->
+      Error.parse_body_json ~gzipped:true query_response_of_yojson body >>= fun response ->
       Logs_lwt.debug (fun m -> m "%a" pp_query_response response) |> Lwt_result.ok >>= fun () ->
       Lwt_result.return response
 

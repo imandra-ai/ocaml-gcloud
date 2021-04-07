@@ -8,6 +8,7 @@
             cohttp-lwt-unix
             containers
             cstruct
+            ezgzip
             jose
             logs
             logs.lwt
