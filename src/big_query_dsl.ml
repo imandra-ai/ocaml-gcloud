@@ -152,9 +152,21 @@ module rec Expression : sig
 
   val cast : as_:type_ -> t -> t
 
-  val over : ?named_window:string -> ?partition_by:t list -> ?order_by:(t * direction) list -> ?window_frame_clause:string -> t -> t
+  val over :
+       ?named_window:string
+    -> ?partition_by:t list
+    -> ?order_by:(t * direction) list
+    -> ?window_frame_clause:string
+    -> t
+    -> t
 
-  val window_specification : ?named_window:string -> ?partition_by:t list -> ?order_by:(t * direction) list -> ?window_frame_clause:string -> unit -> window_specification
+  val window_specification :
+       ?named_window:string
+    -> ?partition_by:t list
+    -> ?order_by:(t * direction) list
+    -> ?window_frame_clause:string
+    -> unit
+    -> window_specification
 
   val if_ : t -> t -> t -> t
 
@@ -277,7 +289,7 @@ end = struct
     | Value of value
     | Array_lit of t list
     | Param of string
-    | Field of t * string (** expr.field *)
+    | Field of t * string  (** expr.field *)
     | Case of t option * (t * t) list * t option
     | Plus of t * t
     | Minus of t * t
@@ -310,7 +322,7 @@ end = struct
     | Extract of date_part * t * string option
     | Query of Query_expr.t
     | Array of Query_expr.t
-    | Offset of t * t (** expr[OFFSET(i)] *)
+    | Offset of t * t  (** expr[OFFSET(i)] *)
     | Exists of Query_expr.t
 
   and fn_info =
@@ -368,7 +380,7 @@ end = struct
     | Array_lit es ->
         Array_lit (List.map f es)
     | Field (e, field) ->
-        Field (f e , field)
+        Field (f e, field)
     | Case (e, whens, else_) ->
         Case
           ( Util.Opt.map f e
@@ -450,7 +462,9 @@ end = struct
     | Param param ->
         Format.fprintf fmt "@%s" param
     | Array_lit es ->
-        fprintf fmt "@[<hv 1>[ %a@ ]@]"
+        fprintf
+          fmt
+          "@[<hv 1>[ %a@ ]@]"
           (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt ",@ ") pp)
           es
     | Field (e, field) ->
@@ -602,11 +616,14 @@ end = struct
     | Exists q ->
         Format.fprintf fmt "@[<hv 2>EXISTS (@,%a@])" Query_expr.pp q
 
+
   and pp_parens fmt t =
     let open Format in
     match t with
-    | Identifier _ | Star | Field _ -> pp fmt t
-    | _ -> fprintf fmt "(%a)" pp t
+    | Identifier _ | Star | Field _ ->
+        pp fmt t
+    | _ ->
+        fprintf fmt "(%a)" pp t
 
 
   and pp_type fmt t =
@@ -630,7 +647,8 @@ end = struct
       fprintf
         fmt
         "%a%a%a%a"
-        Util.(some (fun fmt s -> fprintf fmt "@[%s@]" s)) w.named_window
+        Util.(some (fun fmt s -> fprintf fmt "@[%s@]" s))
+        w.named_window
         Util.(
           some (fun fmt es ->
               fprintf fmt "@[<hv 2>PARTITION BY@ %a@]" (pp_comma_sep_list pp) es ))
@@ -644,13 +662,9 @@ end = struct
                 order_bys ))
         w.order_by
         Util.(
-        some (fun fmt window_frame_clause ->
-            fprintf
-              fmt
-              "@ @[<hv 2>%s@]"
-              window_frame_clause ))
-        w.window_frame_clause
-    )
+          some (fun fmt window_frame_clause ->
+              fprintf fmt "@ @[<hv 2>%s@]" window_frame_clause ))
+        w.window_frame_clause)
 
 
   and pp_order_by fmt (expression, direction) =
@@ -703,8 +717,10 @@ end = struct
   let rec is_aggregate = function
     | Raw _ | Star | Identifier _ | Value _ | Param _ ->
         false
-    | Array_lit es -> List.exists is_aggregate es
-    | Field (e, _) -> is_aggregate e
+    | Array_lit es ->
+        List.exists is_aggregate es
+    | Field (e, _) ->
+        is_aggregate e
     | Case (e, whens, else_) ->
         Util.Opt.map_or ~default:false is_aggregate e
         || List.exists
@@ -807,18 +823,14 @@ end = struct
         And [ e1; e2 ]
 
 
-  let ands = function
-    | e :: es ->
-        List.fold_left ( && ) e es
-    | [] ->
-        bool true
-
+  let ands = function e :: es -> List.fold_left ( && ) e es | [] -> bool true
 
   let ands_opt = function
     | e :: es ->
         Some (List.fold_left ( && ) e es)
     | [] ->
         None
+
 
   let ( || ) e1 e2 =
     match (e1, e2) with
@@ -831,13 +843,8 @@ end = struct
     | e1, e2 ->
         Or [ e1; e2 ]
 
-  let ors = function
-    | e :: es ->
-        List.fold_left ( || ) e es
-    | [] ->
-        bool true
 
-
+  let ors = function e :: es -> List.fold_left ( || ) e es | [] -> bool true
 
   let is_null e = Is_null (e, true)
 
@@ -881,9 +888,14 @@ end = struct
 
   let cast ~as_:t e = Cast (e, t)
 
-  let window_specification ?named_window ?partition_by ?order_by ?window_frame_clause () = { named_window; partition_by; order_by; window_frame_clause }
+  let window_specification
+      ?named_window ?partition_by ?order_by ?window_frame_clause () =
+    { named_window; partition_by; order_by; window_frame_clause }
 
-  let over ?named_window ?partition_by ?order_by ?window_frame_clause e = Over (e, { named_window; partition_by; order_by; window_frame_clause })
+
+  let over ?named_window ?partition_by ?order_by ?window_frame_clause e =
+    Over (e, { named_window; partition_by; order_by; window_frame_clause })
+
 
   let make_fn ?(fn_type = Standard) name args = Func { name; args; fn_type }
 
@@ -1061,9 +1073,16 @@ and Query_expr : sig
 
   val cross_join : from_item -> from_item -> from_item
 
-  val unnest : ?as_:string -> ?with_offset_as:string -> Expression.t -> from_item
+  val unnest :
+    ?as_:string -> ?with_offset_as:string -> Expression.t -> from_item
 
-  val named_window : ?named_window:string -> ?partition_by:Expression.t list -> ?order_by:(Expression.t * Expression.direction) list -> ?window_frame_clause:string -> string -> named_window
+  val named_window :
+       ?named_window:string
+    -> ?partition_by:Expression.t list
+    -> ?order_by:(Expression.t * Expression.direction) list
+    -> ?window_frame_clause:string
+    -> string
+    -> named_window
 
   val select :
        ?distinct:bool
@@ -1093,7 +1112,6 @@ and Query_expr : sig
 
   val union_all : select -> select -> select
 end = struct
-
   type t =
     { with_ : (string * t) list
     ; select : select
@@ -1132,8 +1150,9 @@ end = struct
     | From_ident of string * string option
     | From_query_expr of t * string option
     | From_join of join
-    | From_unnest of Expression.t * string option (* as *) * string option (* with offset as *)
+    | From_unnest of Expression.t * string option (* as *) * string option
 
+  (* with offset as *)
   and join =
     { left : from_item
     ; right : from_item
@@ -1150,7 +1169,9 @@ end = struct
     | RIGHT
 
   and named_window =
-    { name: string; window_specification: Expression.window_specification }
+    { name : string
+    ; window_specification : Expression.window_specification
+    }
 
   let with_aliased ~as_ from_item =
     match from_item with
@@ -1207,8 +1228,16 @@ end = struct
   and pp_offset fmt offset =
     Format.(fprintf fmt "@ OFFSET %a" Expression.pp offset)
 
+
   and pp_named_window fmt w =
-    Format.(fprintf fmt "@[<hv 2>%s AS (@,%a)@]" w.name Expression.pp_window_specification w.window_specification )
+    Format.(
+      fprintf
+        fmt
+        "@[<hv 2>%s AS (@,%a)@]"
+        w.name
+        Expression.pp_window_specification
+        w.window_specification)
+
 
   and pp_select_body fmt (select_body : select_body) =
     Format.(
@@ -1367,8 +1396,18 @@ end = struct
 
   let unnest ?as_ ?with_offset_as e = From_unnest (e, as_, with_offset_as)
 
-  let named_window ?named_window ?partition_by ?order_by ?window_frame_clause name =
-    { name; window_specification = Expression.window_specification ?named_window ?partition_by ?order_by ?window_frame_clause () }
+  let named_window
+      ?named_window ?partition_by ?order_by ?window_frame_clause name =
+    { name
+    ; window_specification =
+        Expression.window_specification
+          ?named_window
+          ?partition_by
+          ?order_by
+          ?window_frame_clause
+          ()
+    }
+
 
   let select
       ?(distinct = false)
@@ -1379,7 +1418,16 @@ end = struct
       ?having
       ?(window = [])
       expressions =
-    Select { distinct; as_struct; expressions; from; where; group_by; having; window }
+    Select
+      { distinct
+      ; as_struct
+      ; expressions
+      ; from
+      ; where
+      ; group_by
+      ; having
+      ; window
+      }
 
 
   let with_ alias ~as_ = (alias, as_)
@@ -1398,9 +1446,6 @@ end = struct
   let alias_of_select_item ({ alias; _ } : select_item) : string option = alias
 
   let union_all s2 s1 =
-    let to_list = function
-      | Select s -> [s]
-      | Union_all ss -> ss
-    in
+    let to_list = function Select s -> [ s ] | Union_all ss -> ss in
     Union_all (to_list s1 @ to_list s2)
 end

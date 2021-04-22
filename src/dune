@@ -1,18 +1,20 @@
 (library
  (name gcloud)
  (public_name gcloud)
- (preprocess (pps ppx_deriving.std ppx_deriving_yojson))
- (libraries base64
-            cohttp
-            cohttp-lwt
-            cohttp-lwt-unix
-            containers
-            cstruct
-            ezgzip
-            jose
-            logs
-            logs.lwt
-            ppx_deriving_yojson.runtime
-            x509
-            yojson
-            lwt))
+ (preprocess
+  (pps ppx_deriving.std ppx_deriving_yojson))
+ (libraries
+  base64
+  cohttp
+  cohttp-lwt
+  cohttp-lwt-unix
+  containers
+  cstruct
+  ezgzip
+  jose
+  logs
+  logs.lwt
+  ppx_deriving_yojson.runtime
+  x509
+  yojson
+  lwt))

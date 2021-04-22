@@ -3,11 +3,11 @@ module List = struct
     let rec aux acc xss =
       match xss with
       | (x :: xs) :: xss ->
-        aux (x :: acc) (xs :: xss)
+          aux (x :: acc) (xs :: xss)
       | [] :: xss ->
-        aux acc xss
+          aux acc xss
       | [] ->
-        acc
+          acc
     in
     aux [] xss
 end

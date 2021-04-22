@@ -1,6 +1,5 @@
 let tests : unit Alcotest_lwt.test_case list =
-  [
-    (* Manually tested *)
+  [ (* Manually tested *)
     (* Alcotest_lwt.test_case "firewalls" `Quick *)
     (*  (fun _ () -> *)
     (*     let open Lwt.Infix in *)
@@ -43,5 +42,4 @@ let tests : unit Alcotest_lwt.test_case list =
 
     (*     | Error e -> *)
     (*       Alcotest.failf "Error:\n%a" Gcloud.Error.pp e *)
-    (*  ) *)
-  ]
+    (*  ) *) ]

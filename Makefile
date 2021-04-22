@@ -15,3 +15,6 @@ _opam:
 
 opam-install-deps:
 	opam install . --deps-only --working-dir --locked --with-test --yes
+
+format:
+	dune build @fmt --auto-promote
