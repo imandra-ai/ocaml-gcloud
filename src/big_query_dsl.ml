@@ -154,7 +154,7 @@ module rec Expression : sig
 
   val over : ?named_window:string -> ?partition_by:t list -> ?order_by:(t * direction) list -> ?window_frame_clause:string -> t -> t
 
-  val window_specification : ?named_window:string -> ?partition_by:t list -> ?order_by:(t * direction) list -> ?window_frame_clause:string -> window_specification
+  val window_specification : ?named_window:string -> ?partition_by:t list -> ?order_by:(t * direction) list -> ?window_frame_clause:string -> unit -> window_specification
 
   val if_ : t -> t -> t -> t
 
@@ -881,7 +881,7 @@ end = struct
 
   let cast ~as_:t e = Cast (e, t)
 
-  let window_specification ?named_window ?partition_by ?order_by ?window_frame_clause = { named_window; partition_by; order_by; window_frame_clause }
+  let window_specification ?named_window ?partition_by ?order_by ?window_frame_clause () = { named_window; partition_by; order_by; window_frame_clause }
 
   let over ?named_window ?partition_by ?order_by ?window_frame_clause e = Over (e, { named_window; partition_by; order_by; window_frame_clause })
 
@@ -1368,7 +1368,7 @@ end = struct
   let unnest ?as_ ?with_offset_as e = From_unnest (e, as_, with_offset_as)
 
   let named_window ?named_window ?partition_by ?order_by ?window_frame_clause name =
-    { name; window_specification = Expression.window_specification ?named_window ?partition_by ?order_by ?window_frame_clause }
+    { name; window_specification = Expression.window_specification ?named_window ?partition_by ?order_by ?window_frame_clause () }
 
   let select
       ?(distinct = false)
