@@ -499,7 +499,7 @@ end = struct
     | Is_null (e, b) ->
         Format.fprintf fmt "%a IS%s NULL" pp e (if b then "" else " NOT")
     | Equal (e1, e2) ->
-        Format.fprintf fmt "%a = %a" pp e1 pp e2
+        Format.fprintf fmt "%a = %a" pp_parens e1 pp_parens e2
     | Is_not_distinct_from (e1, e2) ->
         Format.fprintf fmt "%a IS NOT DISTINCT FROM %a" pp e1 pp e2
     | Neq (e1, e2) ->
