@@ -620,7 +620,7 @@ end = struct
   and pp_parens fmt t =
     let open Format in
     match t with
-    | Identifier _ | Star | Field _ ->
+    | Identifier _ | Star | Field _ | Param _ ->
         pp fmt t
     | _ ->
         fprintf fmt "(%a)" pp t
