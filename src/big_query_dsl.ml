@@ -227,6 +227,8 @@ module rec Expression : sig
 
   val array_length : t -> t
 
+  val array_to_string : sep:t -> t -> t
+
   val struct_ : t list -> t
 
   val format : string -> t -> t
@@ -952,6 +954,8 @@ end = struct
 
 
   let array_length e = make_fn "ARRAY_LENGTH" [ e ]
+
+  let array_to_string ~sep e = make_fn "ARRAY_TO_STRING" [ e; sep ]
 
   let struct_ es =
     (* TODO STRUCT( expr1 [AS field_name] [, ... ]) *)
