@@ -430,7 +430,7 @@ module Jobs = struct
     { kind : string
     ; query : string
     ; use_legacy_sql : bool [@key "useLegacySql"]
-    ; location : string
+    ; location : string option [@default None]
     ; query_parameters : Param.query_parameter list [@key "queryParameters"]
     ; parameter_mode : parameter_mode option
           [@key "parameterMode"] [@default None]
@@ -779,7 +779,7 @@ module Jobs = struct
       ?project_id
       ?(use_legacy_sql = false)
       ?(params = [])
-      ?(location = "EU")
+      ?location
       ?use_int64_timestamp
       q : (query_response, [> Error.t ]) Lwt_result.t =
     let parameter_mode =
@@ -866,7 +866,8 @@ module Jobs = struct
     |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     let query =
-      [ page_token
+      [ Some ("location", [ job_reference.location ])
+      ; page_token
         |> CCOpt.map (fun page_token -> ("pageToken", [ page_token ]))
       ; use_int64_timestamp
         |> CCOpt.map (fun b ->
