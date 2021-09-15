@@ -1,0 +1,3 @@
+(library
+ (name gcloud_shared)
+ (public_name gcloud.shared))

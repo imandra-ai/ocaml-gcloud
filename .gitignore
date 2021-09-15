@@ -3,3 +3,4 @@ _opam
 .merlin
 gcloud.install
 _esy
+*.bs.js

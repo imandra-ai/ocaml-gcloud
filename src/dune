@@ -4,6 +4,7 @@
  (preprocess
   (pps ppx_deriving.std ppx_deriving_yojson))
  (libraries
+  gcloud_shared
   base64
   cohttp
   cohttp-lwt
