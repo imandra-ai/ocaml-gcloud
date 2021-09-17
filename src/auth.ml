@@ -317,30 +317,33 @@ let access_token_of_credentials
         |> X509.Private_key.decode_pem
         |> CCResult.map_err (function `Msg msg -> `Bad_credentials_priv_key msg)
         |> Lwt.return
-        >>= fun (`RSA priv_key) ->
-        let jwk = Jose.Jwk.make_priv_rsa priv_key in
-        let header = Jose.Header.make_header ~typ:"JWT" jwk in
-        let payload =
-          Jose.Jwt.empty_payload
-          |> Jose.Jwt.add_claim "iss" (`String c.client_email)
-          |> Jose.Jwt.add_claim "scope" (`String (String.concat " " scopes))
-          |> Jose.Jwt.add_claim "aud" (`String c.token_uri)
-          |> Jose.Jwt.add_claim "iat" (`String (Printf.sprintf "%.0f" now))
-          |> Jose.Jwt.add_claim
-               "exp"
-               (`String (Printf.sprintf "%.0f" (now +. 3600.)))
-        in
-        Jose.Jwt.sign ~header ~payload jwk
-        |> CCResult.map_err (function `Msg msg -> `Jwt_signing_error msg)
-        |> Lwt.return
-        >>= fun jwt ->
-        let params =
-          [ ("grant_type", [ "urn:ietf:params:oauth:grant-type:jwt-bearer" ])
-          ; ("assertion", [ Jose.Jwt.to_string jwt ])
-          ]
-        in
-        Cohttp_lwt_unix.Client.post_form (Uri.of_string c.token_uri) ~params
-        |> Lwt_result.ok
+        >>= (function
+        | `RSA priv_key ->
+            let jwk = Jose.Jwk.make_priv_rsa priv_key in
+            let header = Jose.Header.make_header ~typ:"JWT" jwk in
+            let payload =
+              Jose.Jwt.empty_payload
+              |> Jose.Jwt.add_claim "iss" (`String c.client_email)
+              |> Jose.Jwt.add_claim "scope" (`String (String.concat " " scopes))
+              |> Jose.Jwt.add_claim "aud" (`String c.token_uri)
+              |> Jose.Jwt.add_claim "iat" (`String (Printf.sprintf "%.0f" now))
+              |> Jose.Jwt.add_claim
+                   "exp"
+                   (`String (Printf.sprintf "%.0f" (now +. 3600.)))
+            in
+            Jose.Jwt.sign ~header ~payload jwk
+            |> CCResult.map_err (function `Msg msg -> `Jwt_signing_error msg)
+            |> Lwt.return
+            >>= fun jwt ->
+            let params =
+              [ ("grant_type", [ "urn:ietf:params:oauth:grant-type:jwt-bearer" ])
+              ; ("assertion", [ Jose.Jwt.to_string jwt ])
+              ]
+            in
+            Cohttp_lwt_unix.Client.post_form (Uri.of_string c.token_uri) ~params
+            |> Lwt_result.ok
+        | _ ->
+            Lwt_result.fail (`Bad_credentials_priv_key "Not RSA key") )
     | GCE_metadata ->
         let uri =
           Printf.sprintf
