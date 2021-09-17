@@ -24,6 +24,6 @@ depends: [
   "ppx_deriving_yojson"
   "ppx_here" {test}
   "ssl"
-  "x509" { >= "0.11.2" } # Required for the ~sloppy arg
+  "x509" { >= "0.12.0" } # Required for the ~sloppy:true arg becoming the default
   "yojson"
 ]

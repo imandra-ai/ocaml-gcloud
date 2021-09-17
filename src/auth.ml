@@ -315,10 +315,6 @@ let access_token_of_credentials
         let now = Unix.time () in
         Cstruct.of_string c.private_key
         |> X509.Private_key.decode_pem
-           (* Some Gcloud RSA private keys have an invalid [d]. [sloppy:true]
-              will re-create the key from the primes [e], [p] and [q] if that is
-              the case. *)
-             ~sloppy:true
         |> CCResult.map_err (function `Msg msg -> `Bad_credentials_priv_key msg)
         |> Lwt.return
         >>= fun (`RSA priv_key) ->
