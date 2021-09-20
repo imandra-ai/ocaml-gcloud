@@ -22,6 +22,7 @@ depends: [
   "lwt"
   "ppx_deriving_yojson"
   "ppx_here" {test}
+  "tls" {test}
   "x509" { >= "0.12.0" } # Required for the ~sloppy:true arg becoming the default
   "yojson"
 ]
