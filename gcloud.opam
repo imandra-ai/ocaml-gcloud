@@ -20,7 +20,6 @@ depends: [
   "jose"
   "logs"
   "lwt"
-  "lwt_ssl"
   "ppx_deriving_yojson"
   "ppx_here" {test}
   "x509" { >= "0.12.0" } # Required for the ~sloppy:true arg becoming the default
