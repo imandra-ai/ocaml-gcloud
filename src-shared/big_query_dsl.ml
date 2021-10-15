@@ -79,7 +79,7 @@ module rec Expression : sig
 
   val unsafe : string -> t
 
-  val ident : string -> t
+  val ident : ?prefix:string -> string -> t
 
   val field : t -> string -> t
 
@@ -795,7 +795,9 @@ end = struct
 
   let unsafe s = Raw s
 
-  let ident i = Identifier i
+  let ident ?prefix i =
+    match prefix with None -> Identifier i | Some p -> Field (Identifier p, i)
+
 
   let field e f = Field (e, f)
 
@@ -1049,7 +1051,7 @@ and Query_expr : sig
 
   val e : ?except:string list -> ?as_:string -> Expression.t -> select_item
 
-  val ident : ?as_:string -> string -> from_item
+  val ident : ?prefix:string -> ?as_:string -> string -> from_item
 
   val query_expr : ?as_:string -> t -> from_item
 
@@ -1384,7 +1386,13 @@ end = struct
 
   let e ?(except = []) ?as_ expression = { expression; alias = as_; except }
 
-  let ident ?as_ name = From_ident (name, as_)
+  let ident ?prefix ?as_ name =
+    match prefix with
+    | None ->
+        From_ident (name, as_)
+    | Some p ->
+        From_ident (p ^ "." ^ name, as_)
+
 
   let query_expr ?as_ t = From_query_expr (t, as_)
 
