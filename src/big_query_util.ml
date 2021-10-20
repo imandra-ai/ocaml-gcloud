@@ -16,5 +16,5 @@ module Debug = struct
               J.Param.param_to_expression p )
         e
     in
-    Q.walk_expression inline_param t
+    Q.walk ~f_e:inline_param t
 end
