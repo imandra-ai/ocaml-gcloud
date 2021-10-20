@@ -125,6 +125,11 @@ module Jobs : sig
 
     val make : name:string -> 'a param' -> query_parameter
 
+    val name : query_parameter -> string
+
+    val param_to_expression :
+      query_parameter -> Gcloud_shared.Big_query_dsl.Expression.t
+
     module Debug : sig
       val to_string : query_parameter -> string * string
     end

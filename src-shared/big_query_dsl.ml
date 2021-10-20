@@ -143,6 +143,8 @@ module rec Expression : sig
 
   val int : int -> t
 
+  val numeric : string -> t
+
   val zero : t
 
   val float : float -> t
@@ -265,6 +267,10 @@ module rec Expression : sig
   val prefix_ident : string -> t -> t
 
   val is_aggregate : t -> bool
+
+  module Debug : sig
+    val map_param : (string -> t) -> t -> t
+  end
 end = struct
   (* TODO: rename to literal? *)
   type value =
@@ -273,6 +279,7 @@ end = struct
     | V_int of int
     | V_float of float
     | V_string of string
+    | V_numeric of string
 
   let sql_of_value = function
     | V_null ->
@@ -285,6 +292,8 @@ end = struct
         string_of_float f
     | V_string s ->
         Printf.sprintf "'%s'" s
+    | V_numeric s ->
+        s
 
 
   [@@@warning "-30"]
@@ -892,6 +901,8 @@ end = struct
 
   let int x = Value (V_int x)
 
+  let numeric s = Value (V_numeric s)
+
   let zero = int 0
 
   let float x = Value (V_float x)
@@ -1015,6 +1026,10 @@ end = struct
   let offset ~i array = Offset (array, i)
 
   let exists q = Exists q
+
+  module Debug = struct
+    let map_param (f : string -> t) = function Param name -> f name | x -> x
+  end
 end
 
 and Query_expr : sig

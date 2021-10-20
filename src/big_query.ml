@@ -387,12 +387,56 @@ module Jobs = struct
           param'_value_to_yojson param'
 
 
+    let rec struct_param'_to_expression :
+        type a. a struct_param -> Gcloud_shared.Big_query_dsl.Expression.t =
+     fun struct_param ->
+      let module E = Gcloud_shared.Big_query_dsl.Expression in
+      let rec go :
+          type a.
+          a struct_param -> Gcloud_shared.Big_query_dsl.Expression.t list =
+        function
+        | EMPTY ->
+            []
+        | FIELD ((name, param'), struct_param') ->
+            (* TODO: use the name *)
+            param'_to_expression param' :: go struct_param'
+      in
+      let es = go struct_param in
+      E.struct_ es
+
+
+    and param'_to_expression :
+        type a. a param' -> Gcloud_shared.Big_query_dsl.Expression.t =
+      let module E = Gcloud_shared.Big_query_dsl.Expression in
+      function
+      | P_BOOL b ->
+          E.(bool b)
+      | P_INTEGER i ->
+          E.(int i)
+      | P_NUMERIC s ->
+          E.(numeric s)
+      | P_STRING s ->
+          E.(string s)
+      | P_DATE d ->
+          E.(string d)
+      | P_TIME d ->
+          E.(string d)
+      | P_TIMESTAMP d ->
+          E.(string d)
+      | P_STRUCT struct_param ->
+          struct_param'_to_expression struct_param
+      | P_ARRAY (_, array_field_params) ->
+          E.array_lit (CCList.map param'_to_expression array_field_params)
+
+
     type query_parameter =
       { name : string
       ; type_ : param
       }
 
     let make ~name type_ = { name; type_ = P type_ }
+
+    let name { name; _ } = name
 
     let query_parameter_to_yojson query_parameter =
       `Assoc
@@ -401,6 +445,8 @@ module Jobs = struct
         ; ("parameterValue", param_value_to_yojson query_parameter.type_)
         ]
 
+
+    let param_to_expression { type_ = P type_; _ } = param'_to_expression type_
 
     module Debug = struct
       let to_string (p : query_parameter) : string * string =
