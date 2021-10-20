@@ -65,12 +65,15 @@ module rec Expression : sig
     | DATE
     | TIME
 
-  val apply : (t -> t) -> t -> t
+  val apply : f_e:(t -> t) -> ?f_q:(Query_expr.t -> Query_expr.t) -> t -> t
 
   val apply_window_specification :
-    (t -> t) -> window_specification -> window_specification
+       f_e:(t -> t)
+    -> f_q:(Query_expr.t -> Query_expr.t)
+    -> window_specification
+    -> window_specification
 
-  val walk : (t -> t) -> t -> t
+  val walk : f_e:(t -> t) -> ?f_q:(Query_expr.t -> Query_expr.t) -> t -> t
 
   val pp : Format.formatter -> t -> unit
 
@@ -391,7 +394,8 @@ end = struct
 
   [@@@warning "+30"]
 
-  let rec apply f e =
+  let rec apply ~f_e ?(f_q = fun q -> q) e =
+    let f = f_e in
     match e with
     | Raw _ | Star | Identifier _ | Value _ | Param _ ->
         e
@@ -445,7 +449,7 @@ end = struct
     | Func v ->
         Func { v with args = List.map f v.args }
     | Over (e, window_specification) ->
-        Over (f e, apply_window_specification f window_specification)
+        Over (f e, apply_window_specification ~f_e ~f_q window_specification)
     | Interval (e, date_part) ->
         Interval (f e, date_part)
     | Timestamp_diff (e1, e2, date_part) ->
@@ -457,17 +461,17 @@ end = struct
     | Extract (date_part, e, at_time_zone) ->
         Extract (date_part, f e, at_time_zone)
     | Query q ->
-        Query (Query_expr.walk_expression f q)
+        Query (f_q q)
     | Array q ->
-        Array (Query_expr.walk_expression f q)
+        Array (f_q q)
     | Offset (e, i) ->
         Offset (f e, f i)
     | Exists q ->
-        Exists (Query_expr.walk_expression f q)
+        Exists (f_q q)
 
 
-  and apply_window_specification f (x : window_specification) =
-    let apply = apply f in
+  and apply_window_specification ~f_e ~f_q (x : window_specification) =
+    let apply = apply ~f_e ~f_q in
     { named_window = x.named_window
     ; partition_by = Util.Opt.map (List.map apply) x.partition_by
     ; order_by = Util.Opt.map (List.map (fun (e, d) -> (apply e, d))) x.order_by
@@ -475,9 +479,9 @@ end = struct
     }
 
 
-  let rec walk f (e : t) : t =
-    let e' = f e in
-    apply (walk f) e'
+  let rec walk ~f_e ?(f_q = fun q -> q) (e : t) : t =
+    let e' = f_e e in
+    apply ~f_e:(walk ~f_e ~f_q) ~f_q:(Query_expr.walk ~f_e ~f_q) e'
 
 
   let rec pp fmt =
@@ -742,7 +746,7 @@ end = struct
     | Identifier i ->
         Identifier (prefix ^ "." ^ i)
     | e ->
-        apply (prefix_ident prefix) e
+        apply ~f_e:(prefix_ident prefix) e
 
 
   (** Returns true if any of the functions called in the expression is an aggreate function. *)
@@ -1154,7 +1158,9 @@ and Query_expr : sig
 
   val union_all : select -> select -> select
 
-  val walk_expression : (Expression.t -> Expression.t) -> t -> t
+  val apply : f_e:(Expression.t -> Expression.t) -> f_q:(t -> t) -> t -> t
+
+  val walk : f_e:(Expression.t -> Expression.t) -> ?f_q:(t -> t) -> t -> t
 end = struct
   type t =
     { with_ : (string * t) list
@@ -1500,9 +1506,11 @@ end = struct
     Union_all (to_list s1 @ to_list s2)
 
 
-  let rec walk_expression (f : Expression.t -> Expression.t) (t : t) : t =
+  let rec apply ~(f_e : Expression.t -> Expression.t) ~(f_q : t -> t) (t : t) :
+      t =
     let module E = Expression in
-    let apply = E.walk f in
+    let apply_q = apply ~f_e ~f_q in
+    let apply_e = E.apply ~f_e ~f_q in
     let rec ae_select = function
       | Select b ->
           Select (ae_select_body b)
@@ -1513,39 +1521,44 @@ end = struct
       ; as_struct = b.as_struct
       ; expressions = List.map ae_select_item b.expressions
       ; from = Util.Opt.map ae_from_item b.from
-      ; where = Util.Opt.map apply b.where
-      ; group_by = List.map apply b.group_by
-      ; having = Util.Opt.map apply b.having
+      ; where = Util.Opt.map apply_e b.where
+      ; group_by = List.map apply_e b.group_by
+      ; having = Util.Opt.map apply_e b.having
       ; window =
           List.map
             (fun w ->
               { name = w.name
               ; window_specification =
-                  E.apply_window_specification f w.window_specification
+                  E.apply_window_specification ~f_e ~f_q w.window_specification
               } )
             b.window
       }
-    and ae_select_item x = { x with expression = apply x.expression }
+    and ae_select_item x = { x with expression = apply_e x.expression }
     and ae_from_item = function
       | From_ident (a, b) ->
           From_ident (a, b)
       | From_query_expr (e, s) ->
-          From_query_expr (walk_expression f e, s)
+          From_query_expr (apply ~f_e ~f_q e, s)
       | From_join join ->
           From_join (ae_join join)
       | From_unnest (e, s1, s2) ->
-          From_unnest (apply e, s1, s2)
+          From_unnest (apply_e e, s1, s2)
     and ae_join x =
       { left = ae_from_item x.left
       ; right = ae_from_item x.right
-      ; on = Util.Opt.map apply x.on
-      ; using = List.map apply x.using
+      ; on = Util.Opt.map apply_e x.on
+      ; using = List.map apply_e x.using
       ; type_ = x.type_
       }
     in
-    { with_ = List.map (fun (k, e) -> (k, walk_expression f e)) t.with_
+    { with_ = List.map (fun (k, q) -> (k, apply_q q)) t.with_
     ; select = ae_select t.select
-    ; order_by = List.map (fun (e, d) -> (apply e, d)) t.order_by
+    ; order_by = List.map (fun (e, d) -> (apply_e e, d)) t.order_by
     ; limit = t.limit
     }
+
+
+  let rec walk ~f_e ?(f_q = fun q -> q) (q : t) : t =
+    let q' = f_q q in
+    apply ~f_e:(Expression.walk ~f_e ~f_q) ~f_q:(walk ~f_e ~f_q) q'
 end
