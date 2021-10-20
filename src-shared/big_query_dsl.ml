@@ -70,6 +70,8 @@ module rec Expression : sig
   val apply_window_specification :
     (t -> t) -> window_specification -> window_specification
 
+  val walk : (t -> t) -> t -> t
+
   val pp : Format.formatter -> t -> unit
 
   val pp_type : Format.formatter -> type_ -> unit
@@ -455,13 +457,13 @@ end = struct
     | Extract (date_part, e, at_time_zone) ->
         Extract (date_part, f e, at_time_zone)
     | Query q ->
-        Query q
+        Query (Query_expr.walk_expression f q)
     | Array q ->
-        Array q
+        Array (Query_expr.walk_expression f q)
     | Offset (e, i) ->
-        Offset (f e, i)
+        Offset (f e, f i)
     | Exists q ->
-        Exists q
+        Exists (Query_expr.walk_expression f q)
 
 
   and apply_window_specification f (x : window_specification) =
@@ -471,6 +473,11 @@ end = struct
     ; order_by = Util.Opt.map (List.map (fun (e, d) -> (apply e, d))) x.order_by
     ; window_frame_clause = x.window_frame_clause
     }
+
+
+  let rec walk f (e : t) : t =
+    let e' = f e in
+    apply (walk f) e'
 
 
   let rec pp fmt =
@@ -1147,7 +1154,7 @@ and Query_expr : sig
 
   val union_all : select -> select -> select
 
-  val apply_expression : (Expression.t -> Expression.t) -> t -> t
+  val walk_expression : (Expression.t -> Expression.t) -> t -> t
 end = struct
   type t =
     { with_ : (string * t) list
@@ -1493,9 +1500,9 @@ end = struct
     Union_all (to_list s1 @ to_list s2)
 
 
-  let rec apply_expression (f : Expression.t -> Expression.t) (t : t) : t =
+  let rec walk_expression (f : Expression.t -> Expression.t) (t : t) : t =
     let module E = Expression in
-    let apply = E.apply f in
+    let apply = E.walk f in
     let rec ae_select = function
       | Select b ->
           Select (ae_select_body b)
@@ -1523,7 +1530,7 @@ end = struct
       | From_ident (a, b) ->
           From_ident (a, b)
       | From_query_expr (e, s) ->
-          From_query_expr (apply_expression f e, s)
+          From_query_expr (walk_expression f e, s)
       | From_join join ->
           From_join (ae_join join)
       | From_unnest (e, s1, s2) ->
@@ -1536,7 +1543,7 @@ end = struct
       ; type_ = x.type_
       }
     in
-    { with_ = List.map (fun (k, e) -> (k, apply_expression f e)) t.with_
+    { with_ = List.map (fun (k, e) -> (k, walk_expression f e)) t.with_
     ; select = ae_select t.select
     ; order_by = List.map (fun (e, d) -> (apply e, d)) t.order_by
     ; limit = t.limit
