@@ -397,7 +397,7 @@ module Jobs = struct
         function
         | EMPTY ->
             []
-        | FIELD ((name, param'), struct_param') ->
+        | FIELD ((_name, param'), struct_param') ->
             (* TODO: use the name *)
             param'_to_expression param' :: go struct_param'
       in
