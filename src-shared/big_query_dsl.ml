@@ -65,6 +65,11 @@ module rec Expression : sig
     | DATE
     | TIME
 
+  val apply : (t -> t) -> t -> t
+
+  val apply_window_specification :
+    (t -> t) -> window_specification -> window_specification
+
   val pp : Format.formatter -> t -> unit
 
   val pp_type : Format.formatter -> type_ -> unit
@@ -375,7 +380,7 @@ end = struct
 
   [@@@warning "+30"]
 
-  let apply f e =
+  let rec apply f e =
     match e with
     | Raw _ | Star | Identifier _ | Value _ | Param _ ->
         e
@@ -429,7 +434,7 @@ end = struct
     | Func v ->
         Func { v with args = List.map f v.args }
     | Over (e, window_specification) ->
-        Over (f e, window_specification)
+        Over (f e, apply_window_specification f window_specification)
     | Interval (e, date_part) ->
         Interval (f e, date_part)
     | Timestamp_diff (e1, e2, date_part) ->
@@ -448,6 +453,15 @@ end = struct
         Offset (f e, i)
     | Exists q ->
         Exists q
+
+
+  and apply_window_specification f (x : window_specification) =
+    let apply = apply f in
+    { named_window = x.named_window
+    ; partition_by = Util.Opt.map (List.map apply) x.partition_by
+    ; order_by = Util.Opt.map (List.map (fun (e, d) -> (apply e, d))) x.order_by
+    ; window_frame_clause = x.window_frame_clause
+    }
 
 
   let rec pp fmt =
@@ -1117,6 +1131,8 @@ and Query_expr : sig
   val alias_of_select_item : select_item -> string option
 
   val union_all : select -> select -> select
+
+  val apply_expression : (Expression.t -> Expression.t) -> t -> t
 end = struct
   type t =
     { with_ : (string * t) list
@@ -1460,4 +1476,54 @@ end = struct
   let union_all s2 s1 =
     let to_list = function Select s -> [ s ] | Union_all ss -> ss in
     Union_all (to_list s1 @ to_list s2)
+
+
+  let rec apply_expression (f : Expression.t -> Expression.t) (t : t) : t =
+    let module E = Expression in
+    let apply = E.apply f in
+    let rec ae_select = function
+      | Select b ->
+          Select (ae_select_body b)
+      | Union_all bs ->
+          Union_all (List.map ae_select_body bs)
+    and ae_select_body b =
+      { distinct = b.distinct
+      ; as_struct = b.as_struct
+      ; expressions = List.map ae_select_item b.expressions
+      ; from = Util.Opt.map ae_from_item b.from
+      ; where = Util.Opt.map apply b.where
+      ; group_by = List.map apply b.group_by
+      ; having = Util.Opt.map apply b.having
+      ; window =
+          List.map
+            (fun w ->
+              { name = w.name
+              ; window_specification =
+                  E.apply_window_specification f w.window_specification
+              } )
+            b.window
+      }
+    and ae_select_item x = { x with expression = apply x.expression }
+    and ae_from_item = function
+      | From_ident (a, b) ->
+          From_ident (a, b)
+      | From_query_expr (e, s) ->
+          From_query_expr (apply_expression f e, s)
+      | From_join join ->
+          From_join (ae_join join)
+      | From_unnest (e, s1, s2) ->
+          From_unnest (apply e, s1, s2)
+    and ae_join x =
+      { left = ae_from_item x.left
+      ; right = ae_from_item x.right
+      ; on = Util.Opt.map apply x.on
+      ; using = List.map apply x.using
+      ; type_ = x.type_
+      }
+    in
+    { with_ = List.map (fun (k, e) -> (k, apply_expression f e)) t.with_
+    ; select = ae_select t.select
+    ; order_by = List.map (fun (e, d) -> (apply e, d)) t.order_by
+    ; limit = t.limit
+    }
 end
