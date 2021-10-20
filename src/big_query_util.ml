@@ -11,7 +11,7 @@ module Debug = struct
         (fun name ->
           match params |> CCList.find_opt (fun p -> J.Param.name p = name) with
           | None ->
-              E.(param name)
+              E.(string (Format.asprintf "PARAM(missing): %s" name))
           | Some p ->
               J.Param.param_to_expression p )
         e
