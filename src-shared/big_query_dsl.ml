@@ -41,6 +41,7 @@ module rec Expression : sig
 
   type type_ =
     | DATE
+    | TIMESTAMP
     | INT64
     | NUMERIC
     | STRING
@@ -359,6 +360,7 @@ end = struct
 
   and type_ =
     | DATE
+    | TIMESTAMP
     | INT64
     | NUMERIC
     | STRING
@@ -670,6 +672,8 @@ end = struct
         ( match t with
         | DATE ->
             "DATE"
+        | TIMESTAMP ->
+            "TIMESTAMP"
         | INT64 ->
             "INT64"
         | NUMERIC ->
