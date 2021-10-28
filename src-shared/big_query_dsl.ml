@@ -252,6 +252,8 @@ module rec Expression : sig
 
   val date : t -> t
 
+  val substring : t -> t -> t -> t
+
   val timestamp : t -> t
 
   val timestamp_add : t -> t -> t
@@ -1027,6 +1029,8 @@ end = struct
   let extract ?at_time_zone date_part ~from =
     Extract (date_part, from, at_time_zone)
 
+
+  let substring t pos len = make_fn "SUBSTRING" [ t; pos; len ]
 
   let interval e date_part = Interval (e, date_part)
 
