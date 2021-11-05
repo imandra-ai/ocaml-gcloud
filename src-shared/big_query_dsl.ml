@@ -254,6 +254,8 @@ module rec Expression : sig
 
   val substring : t -> t -> t -> t
 
+  val replace : t -> t -> t -> t
+
   val timestamp : t -> t
 
   val timestamp_add : t -> t -> t
@@ -1031,6 +1033,10 @@ end = struct
 
 
   let substring t pos len = make_fn "SUBSTRING" [ t; pos; len ]
+
+  let replace t from_value to_value =
+    make_fn "REPLACE" [ t; from_value; to_value ]
+
 
   let interval e date_part = Interval (e, date_part)
 
