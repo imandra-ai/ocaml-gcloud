@@ -159,6 +159,8 @@ module rec Expression : sig
 
   val array_lit : t list -> t
 
+  val array_concat : t list -> t
+
   val star : t
 
   val count : ?distinct:t -> unit -> t
@@ -930,6 +932,10 @@ end = struct
 
   let array_lit es = Array_lit es
 
+  let make_fn ?(fn_type = Standard) name args = Func { name; args; fn_type }
+
+  let array_concat es = make_fn "ARRAY_CONCAT" es
+
   let star = Star
 
   let count ?distinct () = Count distinct
@@ -944,8 +950,6 @@ end = struct
   let over ?named_window ?partition_by ?order_by ?window_frame_clause e =
     Over (e, { named_window; partition_by; order_by; window_frame_clause })
 
-
-  let make_fn ?(fn_type = Standard) name args = Func { name; args; fn_type }
 
   let if_ cond then_ else_ = make_fn "IF" [ cond; then_; else_ ]
 
