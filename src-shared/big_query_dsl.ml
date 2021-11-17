@@ -224,6 +224,8 @@ module rec Expression : sig
 
   val round : t -> t
 
+  val mod_ : t -> t -> t
+
   val coalesce : t -> t -> t
 
   val concat : t list -> t
@@ -984,6 +986,8 @@ end = struct
   let ceil e = make_fn "CEIL" [ e ]
 
   let round e = make_fn "ROUND" [ e ]
+
+  let mod_ e1 e2 = make_fn "MOD" [ e1; e2 ]
 
   let coalesce e1 e2 = make_fn "COALESCE" [ e1; e2 ]
 
