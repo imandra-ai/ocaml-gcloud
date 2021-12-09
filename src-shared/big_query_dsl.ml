@@ -226,7 +226,7 @@ module rec Expression : sig
 
   val mod_ : t -> t -> t
 
-  val coalesce : t -> t -> t
+  val coalesce : t list -> t
 
   val concat : t list -> t
 
@@ -989,7 +989,7 @@ end = struct
 
   let mod_ e1 e2 = make_fn "MOD" [ e1; e2 ]
 
-  let coalesce e1 e2 = make_fn "COALESCE" [ e1; e2 ]
+  let coalesce es = make_fn "COALESCE" es
 
   let concat es = make_fn "CONCAT" es
 
