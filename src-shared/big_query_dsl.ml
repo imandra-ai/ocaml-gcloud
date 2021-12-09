@@ -167,6 +167,15 @@ module rec Expression : sig
 
   val cast : as_:type_ -> t -> t
 
+  val array_agg :
+       ?distinct:bool
+    -> ?ignore_nulls:bool
+    -> ?respect_nulls:bool
+    -> ?order_by:(t * direction) list
+    -> ?limit:t
+    -> t
+    -> t
+
   val over :
        ?named_window:string
     -> ?partition_by:t list
@@ -353,6 +362,7 @@ end = struct
         *)
     | Cast of t * type_
     | Func of fn_info
+    | Array_agg of array_agg
     | Over of t * window_specification
     | Interval of t * date_part
     | Timestamp_diff of t * t * date_part
@@ -385,6 +395,15 @@ end = struct
   and direction =
     | Asc
     | Desc
+
+  and array_agg =
+    { distinct : bool
+    ; expression : t
+    ; ignore_nulls : bool
+    ; respect_nulls : bool
+    ; order_by : (t * direction) list option
+    ; limit : t option
+    }
 
   and window_frame_clause = string
 
@@ -471,6 +490,8 @@ end = struct
         Cast (f e1, t)
     | Func v ->
         Func { v with args = List.map f v.args }
+    | Array_agg a ->
+        Array_agg (apply_array_agg ~f_e ~f_q a)
     | Over (e, window_specification) ->
         Over (f e, apply_window_specification ~f_e ~f_q window_specification)
     | Interval (e, date_part) ->
@@ -491,6 +512,17 @@ end = struct
         Offset (f e, f i)
     | Exists q ->
         Exists (f_q q)
+
+
+  and apply_array_agg ~f_e ~f_q (x : array_agg) =
+    let apply = apply ~f_e ~f_q in
+    { distinct = x.distinct
+    ; expression = apply x.expression
+    ; ignore_nulls = x.ignore_nulls
+    ; respect_nulls = x.respect_nulls
+    ; order_by = Util.Opt.map (List.map (fun (e, d) -> (apply e, d))) x.order_by
+    ; limit = Util.Opt.map apply x.limit
+    }
 
 
   and apply_window_specification ~f_e ~f_q (x : window_specification) =
@@ -637,6 +669,23 @@ end = struct
           name
           (Util.pp_comma_sep_list pp)
           args
+    | Array_agg a ->
+        let f x = Format.fprintf fmt x in
+        f "@[<hv 2>ARRAY_AGG(@," ;
+        if a.distinct then f "DISTINCT@ " ;
+        f "%a" pp a.expression ;
+        if a.ignore_nulls then f "@ IGNORE NULLS" ;
+        if a.respect_nulls then f "@ RESPECT NULLS" ;
+        ( match a.order_by with
+        | None ->
+            ()
+        | Some order_by ->
+            f
+              "@ @[<hv 2>ORDER BY@ %a@]"
+              (Util.pp_comma_sep_list pp_order_by)
+              order_by ) ;
+        (match a.limit with None -> () | Some limit -> f "@ LIMIT %a" pp limit) ;
+        f ")@]"
     | Over (e, window_specification) ->
         Format.fprintf
           fmt
@@ -853,6 +902,8 @@ end = struct
         true
     | Func v ->
         List.exists is_aggregate v.args
+    | Array_agg _ ->
+        true
     | Over (e, _window_specification) ->
         is_aggregate e
     | Interval (e, _date_part) ->
@@ -979,6 +1030,17 @@ end = struct
   let count ?distinct () = Count distinct
 
   let cast ~as_:t e = Cast (e, t)
+
+  let array_agg
+      ?(distinct = false)
+      ?(ignore_nulls = false)
+      ?(respect_nulls = false)
+      ?order_by
+      ?limit
+      e =
+    Array_agg
+      { distinct; ignore_nulls; respect_nulls; order_by; limit; expression = e }
+
 
   let window_specification
       ?named_window ?partition_by ?order_by ?window_frame_clause () =
