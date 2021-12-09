@@ -246,7 +246,13 @@ module rec Expression : sig
 
   val array_to_string : sep:t -> t -> t
 
+  val struct_lit_tuple : t list -> t
+
   val struct_ : t list -> t
+
+  val struct_lit_typeless : (t * string option) list -> t
+
+  val as_ : string -> t -> t * string option
 
   val format : string -> t -> t
 
@@ -318,6 +324,9 @@ end = struct
     | Identifier of string
     | Value of value
     | Array_lit of t list
+    | Struct_lit_tuple of t list  (** [(expr1, expr2 [, ...])] *)
+    | Struct_lit_typeless of (t * string option) list
+        (** [STRUCT( expr1 [AS field_name] [, ...])] *)
     | Param of string
     | Field of t * string  (** expr.field *)
     | Case of t option * (t * t) list * t option
@@ -411,6 +420,10 @@ end = struct
         e
     | Array_lit es ->
         Array_lit (List.map f es)
+    | Struct_lit_tuple es ->
+        Struct_lit_tuple (List.map f es)
+    | Struct_lit_typeless fs ->
+        Struct_lit_typeless (List.map (fun (e, alias) -> (f e, alias)) fs)
     | Field (e, field) ->
         Field (f e, field)
     | Case (e, whens, else_) ->
@@ -513,6 +526,25 @@ end = struct
           "@[<hv 1>[ %a@ ]@]"
           (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt ",@ ") pp)
           es
+    | Struct_lit_tuple es ->
+        fprintf
+          fmt
+          "@[<hv 1>(%a)@]"
+          (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt ",@ ") pp)
+          es
+    | Struct_lit_typeless fs ->
+        let pp_as fmt (e, alias) =
+          match alias with
+          | None ->
+              pp fmt e
+          | Some alias ->
+              fprintf fmt "@[<hv 1>%a@ AS %s@]" pp e alias
+        in
+        fprintf
+          fmt
+          "@[<hv 1>STRUCT(%a)@]"
+          (pp_print_list ~pp_sep:(fun fmt () -> fprintf fmt ",@ ") pp_as)
+          fs
     | Field (e, field) ->
         Format.fprintf fmt "%a.%s" pp_parens e field
     | Case (e, whens, else_) ->
@@ -767,6 +799,10 @@ end = struct
         false
     | Array_lit es ->
         List.exists is_aggregate es
+    | Struct_lit_tuple es ->
+        List.exists is_aggregate es
+    | Struct_lit_typeless fs ->
+        List.exists (fun (e, _alias) -> is_aggregate e) fs
     | Field (e, _) ->
         is_aggregate e
     | Case (e, whens, else_) ->
@@ -1011,10 +1047,13 @@ end = struct
 
   let array_to_string ~sep e = make_fn "ARRAY_TO_STRING" [ e; sep ]
 
-  let struct_ es =
-    (* TODO STRUCT( expr1 [AS field_name] [, ... ]) *)
-    make_fn "STRUCT" es
+  let struct_lit_tuple es = Struct_lit_tuple es
 
+  let struct_ es = Struct_lit_typeless (List.map (fun e -> (e, None)) es)
+
+  let struct_lit_typeless fs = Struct_lit_typeless fs
+
+  let as_ alias e = (e, Some alias)
 
   let format str e = make_fn "FORMAT" [ string str; e ]
 
