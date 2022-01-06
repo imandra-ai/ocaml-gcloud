@@ -658,7 +658,7 @@ end = struct
               | Some e ->
                   fprintf fmt "DISTINCT %a" pp e
               | None ->
-                  fprintf fmt "*" )
+                  fprintf fmt " * " )
             e)
     | Cast (e1, t) ->
         Format.fprintf fmt "CAST(%a AS %a)" pp e1 pp_type t
