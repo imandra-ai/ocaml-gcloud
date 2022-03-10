@@ -92,10 +92,10 @@ let parse_body_json
 
 
 let of_response_status_code_and_body
-    (status_code : Cohttp.Code.status_code) (body : Cohttp_lwt.Body.t) :
-    ('a, [> t ]) Lwt_result.t =
+    ?gzipped (status_code : Cohttp.Code.status_code) (body : Cohttp_lwt.Body.t)
+    : ('a, [> t ]) Lwt_result.t =
   let open Lwt.Infix in
-  parse_body_json api_json_error_of_yojson body
+  parse_body_json ?gzipped api_json_error_of_yojson body
   >>= function
   | Ok parsed_error ->
       Lwt_result.fail (`Gcloud_api_error (status_code, Json parsed_error))

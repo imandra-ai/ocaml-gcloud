@@ -901,7 +901,7 @@ module Jobs = struct
         |> Lwt_result.ok
         >>= fun () -> Lwt_result.return response
     | status_code ->
-        Error.of_response_status_code_and_body status_code body
+        Error.of_response_status_code_and_body ~gzipped:true status_code body
 
 
   let get_query_results
@@ -954,7 +954,7 @@ module Jobs = struct
         |> Lwt_result.ok
         >>= fun () -> Lwt_result.return response
     | status_code ->
-        Error.of_response_status_code_and_body status_code body
+        Error.of_response_status_code_and_body ~gzipped:true status_code body
 
 
   let rec poll_until_complete ?(attempts = 5) (query_response : query_response)
