@@ -235,6 +235,8 @@ module rec Expression : sig
 
   val mod_ : t -> t -> t
 
+  val safe_divide : t -> t -> t
+
   val coalesce : t list -> t
 
   val concat : t list -> t
@@ -1086,6 +1088,8 @@ end = struct
   let round e = make_fn "ROUND" [ e ]
 
   let mod_ e1 e2 = make_fn "MOD" [ e1; e2 ]
+
+  let safe_divide e1 e2 = make_fn "SAFE_DIVIDE" [ e1; e2 ]
 
   let coalesce es = make_fn "COALESCE" es
 
