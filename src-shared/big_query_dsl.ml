@@ -247,6 +247,10 @@ module rec Expression : sig
 
   val to_json_string : t -> t
 
+  val json_query : t -> t -> t
+
+  val json_value : t -> t -> t
+
   val row_number : unit -> t
 
   val generate_array : t -> t -> t -> t
@@ -1100,6 +1104,10 @@ end = struct
   let least es = make_fn "LEAST" es
 
   let to_json_string e = make_fn "TO_JSON_STRING" [ e ]
+
+  let json_query e json_path = make_fn "JSON_QUERY" [ e; json_path ]
+
+  let json_value e json_path = make_fn "JSON_VALUE" [ e; json_path ]
 
   let row_number () = make_fn "ROW_NUMBER" [] ~fn_type:Window
 
