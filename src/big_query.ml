@@ -837,6 +837,19 @@ module Jobs = struct
     result |> CCResult.map_err (CCFormat.sprintf "%s: %s" msg)
 
 
+  let gzip_headers =
+    [ ("Accept-Encoding", "deflate, gzip"); ("User-Agent", "gzip") ]
+
+
+  let add_gzip_headers ~use_gzip headers =
+    Cohttp.Header.add_list headers gzip_headers
+
+
+  let use_gzip () =
+    Sys.getenv_opt "OCAML_GCLOUD_BQ_USE_GZIP"
+    |> CCOption.map_or ~default:true bool_of_string
+
+
   let query
       ?project_id
       ?dry_run
@@ -874,6 +887,8 @@ module Jobs = struct
       project_id |> CCOpt.get_or ~default:token_info.project_id
     in
 
+    let use_gzip = use_gzip () in
+
     Lwt.catch
       (fun () ->
         let uri =
@@ -888,9 +903,8 @@ module Jobs = struct
             [ ( "Authorization"
               , Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
             ; ("Content-Type", "application/json")
-            ; ("Accept-Encoding", "deflate, gzip")
-            ; ("User-Agent", "gzip")
             ]
+          |> add_gzip_headers ~use_gzip
         in
         let body_str =
           request |> query_request_to_yojson |> Yojson.Safe.to_string
@@ -913,13 +927,16 @@ module Jobs = struct
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
     | `OK ->
-        Error.parse_body_json ~gzipped:true query_response_of_yojson body
+        Error.parse_body_json ~gzipped:use_gzip query_response_of_yojson body
         >>= fun response ->
         Logs_lwt.debug (fun m -> m "%a" pp_query_response response)
         |> Lwt_result.ok
         >>= fun () -> Lwt_result.return response
     | status_code ->
-        Error.of_response_status_code_and_body ~gzipped:true status_code body
+        Error.of_response_status_code_and_body
+          ~gzipped:use_gzip
+          status_code
+          body
 
 
   let get_query_results
@@ -949,6 +966,8 @@ module Jobs = struct
       |> CCList.filter_map CCFun.id
     in
 
+    let use_gzip = use_gzip () in
+
     let uri =
       Uri.make
         ()
@@ -965,9 +984,8 @@ module Jobs = struct
       Cohttp.Header.of_list
         [ ( "Authorization"
           , Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
-        ; ("Accept-Encoding", "deflate, gzip")
-        ; ("User-Agent", "gzip")
         ]
+      |> add_gzip_headers ~use_gzip
     in
     Lwt.catch
       (fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok)
@@ -975,13 +993,16 @@ module Jobs = struct
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
     | `OK ->
-        Error.parse_body_json ~gzipped:true query_response_of_yojson body
+        Error.parse_body_json ~gzipped:use_gzip query_response_of_yojson body
         >>= fun response ->
         Logs_lwt.debug (fun m -> m "%a" pp_query_response response)
         |> Lwt_result.ok
         >>= fun () -> Lwt_result.return response
     | status_code ->
-        Error.of_response_status_code_and_body ~gzipped:true status_code body
+        Error.of_response_status_code_and_body
+          ~gzipped:use_gzip
+          status_code
+          body
 
 
   let rec poll_until_complete ?(attempts = 5) (query_response : query_response)
