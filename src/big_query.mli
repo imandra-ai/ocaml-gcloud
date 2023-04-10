@@ -136,7 +136,7 @@ module Jobs : sig
   end
 
   type job_reference =
-    { job_id : string
+    { job_id : string option
     ; project_id : string
     ; location : string
     }

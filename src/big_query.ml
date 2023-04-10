@@ -487,7 +487,7 @@ module Jobs = struct
   [@@deriving to_yojson]
 
   type job_reference =
-    { job_id : string [@key "jobId"]
+    { job_id : string option [@key "jobId"] [@default None]
     ; project_id : string [@key "projectId"]
     ; location : string
     }
@@ -688,16 +688,24 @@ module Jobs = struct
 
 
   let pp_query_response fmt (query_response : query_response) =
+    let pp_job_id fmt = function
+      | None ->
+          ()
+      | Some job_id ->
+          Format.fprintf fmt " job_id=%s" job_id
+    in
     match query_response.job_complete with
     | None ->
         Format.fprintf
           fmt
-          "Response: job_id=%s job_complete=false"
+          "Response: %a job_complete=false"
+          pp_job_id
           query_response.job_reference.job_id
     | Some data ->
         Format.fprintf
           fmt
-          "Response: job_id=%s %a"
+          "Response:%a %a"
+          pp_job_id
           query_response.job_reference.job_id
           pp_query_response_data
           data
@@ -918,6 +926,15 @@ module Jobs = struct
       ?page_token ?use_int64_timestamp (job_reference : job_reference) :
       (query_response, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
+    let job_id =
+      match job_reference.job_id with
+      | None ->
+          Error (`Gcloud_retry_timeout "get_query_results: no job_id")
+      | Some job_id ->
+          Ok job_id
+    in
+    Lwt.return job_id
+    >>= fun job_id ->
     Auth.get_access_token ~scopes:[ Scopes.bigquery ] ()
     |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
@@ -941,7 +958,7 @@ module Jobs = struct
           (Printf.sprintf
              "bigquery/v2/projects/%s/queries/%s"
              job_reference.project_id
-             job_reference.job_id )
+             job_id )
         ~query
     in
     let headers =
