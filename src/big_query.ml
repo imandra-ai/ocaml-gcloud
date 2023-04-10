@@ -672,6 +672,21 @@ module Jobs = struct
          ] )
 
 
+  let pp_query_response_data fmt (data : query_response_data) =
+    Format.fprintf
+      fmt
+      "Response: total_bytes_processed=%s cache_hit=%b rows=%d%s%s"
+      data.total_bytes_processed
+      data.cache_hit
+      (CCList.length data.rows)
+      ( data.total_rows
+      |> CCOpt.map_or ~default:"" (fun t -> Printf.sprintf " total_rows=%s" t)
+      )
+      ( data.num_dml_affected_rows
+      |> CCOpt.map_or ~default:"" (fun t ->
+             Printf.sprintf " num_dml_affected_rows=%s" t ) )
+
+
   let pp_query_response fmt (query_response : query_response) =
     match query_response.job_complete with
     | None ->
@@ -682,18 +697,10 @@ module Jobs = struct
     | Some data ->
         Format.fprintf
           fmt
-          "Response: job_id=%s total_bytes_processed=%s cache_hit=%b \
-           rows=%d%s%s"
+          "Response: job_id=%s %a"
           query_response.job_reference.job_id
-          data.total_bytes_processed
-          data.cache_hit
-          (CCList.length data.rows)
-          ( data.total_rows
-          |> CCOpt.map_or ~default:"" (fun t ->
-                 Printf.sprintf " total_rows=%s" t ) )
-          ( data.num_dml_affected_rows
-          |> CCOpt.map_or ~default:"" (fun t ->
-                 Printf.sprintf " num_dml_affected_rows=%s" t ) )
+          pp_query_response_data
+          data
 
 
   type query_response_complete =
