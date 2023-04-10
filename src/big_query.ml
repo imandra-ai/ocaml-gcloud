@@ -475,6 +475,7 @@ module Jobs = struct
   type query_request =
     { kind : string
     ; query : string
+    ; dry_run : bool option [@key "dryRun"] [@default None]
     ; use_legacy_sql : bool [@key "useLegacySql"]
     ; location : string option [@default None]
     ; query_parameters : Param.query_parameter list [@key "queryParameters"]
@@ -823,6 +824,7 @@ module Jobs = struct
 
   let query
       ?project_id
+      ?dry_run
       ?(use_legacy_sql = false)
       ?(params = [])
       ?location
@@ -840,6 +842,7 @@ module Jobs = struct
     let request =
       { kind = "bigquery#queryRequest"
       ; query = q
+      ; dry_run
       ; use_legacy_sql
       ; location
       ; parameter_mode

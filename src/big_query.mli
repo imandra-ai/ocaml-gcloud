@@ -178,6 +178,7 @@ module Jobs : sig
 
   val query :
        ?project_id:string
+    -> ?dry_run:bool
     -> ?use_legacy_sql:bool
     -> ?params:Param.query_parameter list
     -> ?location:string
