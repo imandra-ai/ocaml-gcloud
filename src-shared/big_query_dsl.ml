@@ -1,7 +1,8 @@
 module Util = struct
   let pp_comma_sep_list :
-        'a.    (Format.formatter -> 'a -> unit) -> Format.formatter -> 'a list
-        -> unit =
+        'a.
+        (Format.formatter -> 'a -> unit) -> Format.formatter -> 'a list -> unit
+      =
    fun pp_item fmt xs ->
     Format.(
       fprintf
@@ -12,14 +13,20 @@ module Util = struct
 
 
   let some :
-        'a.    (Format.formatter -> 'a -> unit) -> Format.formatter -> 'a option
+        'a.
+           (Format.formatter -> 'a -> unit)
+        -> Format.formatter
+        -> 'a option
         -> unit =
    fun pp_item fmt -> function None -> () | Some x -> pp_item fmt x
 
 
   let pp_non_empty_list :
-        'a.    (Format.formatter -> 'a list -> unit) -> Format.formatter
-        -> 'a list -> unit =
+        'a.
+           (Format.formatter -> 'a list -> unit)
+        -> Format.formatter
+        -> 'a list
+        -> unit =
    fun pp_list fmt -> function [] -> () | xs -> pp_list fmt xs
 
 
