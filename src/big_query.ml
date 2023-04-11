@@ -475,6 +475,7 @@ module Jobs = struct
   type query_request =
     { kind : string
     ; query : string
+    ; dry_run : bool option [@key "dryRun"] [@default None]
     ; use_legacy_sql : bool [@key "useLegacySql"]
     ; location : string option [@default None]
     ; query_parameters : Param.query_parameter list [@key "queryParameters"]
@@ -486,7 +487,7 @@ module Jobs = struct
   [@@deriving to_yojson]
 
   type job_reference =
-    { job_id : string [@key "jobId"]
+    { job_id : string option [@key "jobId"] [@default None]
     ; project_id : string [@key "projectId"]
     ; location : string
     }
@@ -671,28 +672,43 @@ module Jobs = struct
          ] )
 
 
+  let pp_query_response_data fmt (data : query_response_data) =
+    Format.fprintf
+      fmt
+      "Response: total_bytes_processed=%s cache_hit=%b rows=%d%s%s"
+      data.total_bytes_processed
+      data.cache_hit
+      (CCList.length data.rows)
+      ( data.total_rows
+      |> CCOpt.map_or ~default:"" (fun t -> Printf.sprintf " total_rows=%s" t)
+      )
+      ( data.num_dml_affected_rows
+      |> CCOpt.map_or ~default:"" (fun t ->
+             Printf.sprintf " num_dml_affected_rows=%s" t ) )
+
+
   let pp_query_response fmt (query_response : query_response) =
+    let pp_job_id fmt = function
+      | None ->
+          ()
+      | Some job_id ->
+          Format.fprintf fmt " job_id=%s" job_id
+    in
     match query_response.job_complete with
     | None ->
         Format.fprintf
           fmt
-          "Response: job_id=%s job_complete=false"
+          "Response: %a job_complete=false"
+          pp_job_id
           query_response.job_reference.job_id
     | Some data ->
         Format.fprintf
           fmt
-          "Response: job_id=%s total_bytes_processed=%s cache_hit=%b \
-           rows=%d%s%s"
+          "Response:%a %a"
+          pp_job_id
           query_response.job_reference.job_id
-          data.total_bytes_processed
-          data.cache_hit
-          (CCList.length data.rows)
-          ( data.total_rows
-          |> CCOpt.map_or ~default:"" (fun t ->
-                 Printf.sprintf " total_rows=%s" t ) )
-          ( data.num_dml_affected_rows
-          |> CCOpt.map_or ~default:"" (fun t ->
-                 Printf.sprintf " num_dml_affected_rows=%s" t ) )
+          pp_query_response_data
+          data
 
 
   type query_response_complete =
@@ -821,8 +837,22 @@ module Jobs = struct
     result |> CCResult.map_err (CCFormat.sprintf "%s: %s" msg)
 
 
+  let gzip_headers =
+    [ ("Accept-Encoding", "deflate, gzip"); ("User-Agent", "gzip") ]
+
+
+  let add_gzip_headers ~use_gzip headers =
+    Cohttp.Header.add_list headers gzip_headers
+
+
+  let use_gzip () =
+    Sys.getenv_opt "OCAML_GCLOUD_BQ_USE_GZIP"
+    |> CCOption.map_or ~default:true bool_of_string
+
+
   let query
       ?project_id
+      ?dry_run
       ?(use_legacy_sql = false)
       ?(params = [])
       ?location
@@ -840,6 +870,7 @@ module Jobs = struct
     let request =
       { kind = "bigquery#queryRequest"
       ; query = q
+      ; dry_run
       ; use_legacy_sql
       ; location
       ; parameter_mode
@@ -856,6 +887,8 @@ module Jobs = struct
       project_id |> CCOpt.get_or ~default:token_info.project_id
     in
 
+    let use_gzip = use_gzip () in
+
     Lwt.catch
       (fun () ->
         let uri =
@@ -870,9 +903,8 @@ module Jobs = struct
             [ ( "Authorization"
               , Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
             ; ("Content-Type", "application/json")
-            ; ("Accept-Encoding", "deflate, gzip")
-            ; ("User-Agent", "gzip")
             ]
+          |> add_gzip_headers ~use_gzip
         in
         let body_str =
           request |> query_request_to_yojson |> Yojson.Safe.to_string
@@ -895,19 +927,31 @@ module Jobs = struct
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
     | `OK ->
-        Error.parse_body_json ~gzipped:true query_response_of_yojson body
+        Error.parse_body_json ~gzipped:use_gzip query_response_of_yojson body
         >>= fun response ->
         Logs_lwt.debug (fun m -> m "%a" pp_query_response response)
         |> Lwt_result.ok
         >>= fun () -> Lwt_result.return response
     | status_code ->
-        Error.of_response_status_code_and_body ~gzipped:true status_code body
+        Error.of_response_status_code_and_body
+          ~gzipped:use_gzip
+          status_code
+          body
 
 
   let get_query_results
       ?page_token ?use_int64_timestamp (job_reference : job_reference) :
       (query_response, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
+    let job_id =
+      match job_reference.job_id with
+      | None ->
+          Error (`Gcloud_retry_timeout "get_query_results: no job_id")
+      | Some job_id ->
+          Ok job_id
+    in
+    Lwt.return job_id
+    >>= fun job_id ->
     Auth.get_access_token ~scopes:[ Scopes.bigquery ] ()
     |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
@@ -922,6 +966,8 @@ module Jobs = struct
       |> CCList.filter_map CCFun.id
     in
 
+    let use_gzip = use_gzip () in
+
     let uri =
       Uri.make
         ()
@@ -931,16 +977,15 @@ module Jobs = struct
           (Printf.sprintf
              "bigquery/v2/projects/%s/queries/%s"
              job_reference.project_id
-             job_reference.job_id )
+             job_id )
         ~query
     in
     let headers =
       Cohttp.Header.of_list
         [ ( "Authorization"
           , Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
-        ; ("Accept-Encoding", "deflate, gzip")
-        ; ("User-Agent", "gzip")
         ]
+      |> add_gzip_headers ~use_gzip
     in
     Lwt.catch
       (fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok)
@@ -948,13 +993,16 @@ module Jobs = struct
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
     | `OK ->
-        Error.parse_body_json ~gzipped:true query_response_of_yojson body
+        Error.parse_body_json ~gzipped:use_gzip query_response_of_yojson body
         >>= fun response ->
         Logs_lwt.debug (fun m -> m "%a" pp_query_response response)
         |> Lwt_result.ok
         >>= fun () -> Lwt_result.return response
     | status_code ->
-        Error.of_response_status_code_and_body ~gzipped:true status_code body
+        Error.of_response_status_code_and_body
+          ~gzipped:use_gzip
+          status_code
+          body
 
 
   let rec poll_until_complete ?(attempts = 5) (query_response : query_response)

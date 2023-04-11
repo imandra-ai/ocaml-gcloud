@@ -136,7 +136,7 @@ module Jobs : sig
   end
 
   type job_reference =
-    { job_id : string
+    { job_id : string option
     ; project_id : string
     ; location : string
     }
@@ -163,6 +163,8 @@ module Jobs : sig
     ; cache_hit : bool
     }
 
+  val pp_query_response_data : Format.formatter -> query_response_data -> unit
+
   (** Type of query responses. We may or may not have the data, depending on
       whether the job completed within the timeout.
 
@@ -178,6 +180,7 @@ module Jobs : sig
 
   val query :
        ?project_id:string
+    -> ?dry_run:bool
     -> ?use_legacy_sql:bool
     -> ?params:Param.query_parameter list
     -> ?location:string
