@@ -1005,8 +1005,9 @@ module Jobs = struct
           body
 
 
-  let rec poll_until_complete ?(attempts = 5) (query_response : query_response)
-      : (query_response_complete, [> Error.t ]) Lwt_result.t =
+  let rec poll_until_complete
+      ?(poll_every_s = 1.) ?(attempts = 5) (query_response : query_response) :
+      (query_response_complete, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
     match query_response.job_complete with
     | Some data ->
@@ -1023,7 +1024,7 @@ module Jobs = struct
               "Big_query.Jobs.poll_until_complete: maximum number of retries \
                reached" )
         else
-          Lwt_unix.sleep 0.5
+          Lwt_unix.sleep poll_every_s
           |> Lwt_result.ok
           >>= fun () ->
           get_query_results query_response.job_reference

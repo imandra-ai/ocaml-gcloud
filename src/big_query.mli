@@ -205,7 +205,8 @@ module Jobs : sig
     query_response_complete -> Yojson.Safe.t
 
   val poll_until_complete :
-       ?attempts:int
+       ?poll_every_s:float
+    -> ?attempts:int
     -> query_response
     -> (query_response_complete, [> Error.t ]) result Lwt.t
 
