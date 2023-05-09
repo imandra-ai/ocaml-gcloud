@@ -1,3 +1,7 @@
+let src = Logs.Src.create "gcloud.bigquery"
+
+module L = (val Logs_lwt.src_log src)
+
 module Scopes = struct
   let bigquery = "https://www.googleapis.com/auth/bigquery"
 end
@@ -112,7 +116,7 @@ module Datasets = struct
               , Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
             ]
         in
-        Logs_lwt.debug (fun m -> m "GET %a" Uri.pp_hum uri)
+        L.debug (fun m -> m "GET %a" Uri.pp_hum uri)
         |> Lwt_result.ok
         >>= fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok
         )
@@ -149,7 +153,7 @@ module Datasets = struct
               , Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
             ]
         in
-        Logs_lwt.debug (fun m -> m "GET %a" Uri.pp_hum uri)
+        L.debug (fun m -> m "GET %a" Uri.pp_hum uri)
         |> Lwt_result.ok
         >>= fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok
         )
@@ -228,7 +232,7 @@ module Datasets = struct
                 )
               ]
           in
-          Logs_lwt.debug (fun m -> m "GET %a" Uri.pp_hum uri)
+          L.debug (fun m -> m "GET %a" Uri.pp_hum uri)
           |> Lwt_result.ok
           >>= fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok
           )
@@ -910,7 +914,7 @@ module Jobs = struct
           request |> query_request_to_yojson |> Yojson.Safe.to_string
         in
         let body = body_str |> Cohttp_lwt.Body.of_string in
-        Logs_lwt.debug (fun m ->
+        L.debug (fun m ->
             let truncate str =
               if String.length str > 1000
               then CCString.sub str 0 1000 ^ "..."
@@ -929,7 +933,7 @@ module Jobs = struct
     | `OK ->
         Error.parse_body_json ~gzipped:use_gzip query_response_of_yojson body
         >>= fun response ->
-        Logs_lwt.debug (fun m -> m "%a" pp_query_response response)
+        L.debug (fun m -> m "%a" pp_query_response response)
         |> Lwt_result.ok
         >>= fun () -> Lwt_result.return response
     | status_code ->
@@ -995,7 +999,7 @@ module Jobs = struct
     | `OK ->
         Error.parse_body_json ~gzipped:use_gzip query_response_of_yojson body
         >>= fun response ->
-        Logs_lwt.debug (fun m -> m "%a" pp_query_response response)
+        L.debug (fun m -> m "%a" pp_query_response response)
         |> Lwt_result.ok
         >>= fun () -> Lwt_result.return response
     | status_code ->
