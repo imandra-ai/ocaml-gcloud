@@ -132,6 +132,7 @@ module rec Expression : sig
 
   val ( = ) : t -> t -> t
 
+  val is_distinct_from : t -> t -> t
   val is_not_distinct_from : t -> t -> t
 
   val ( <> ) : t -> t -> t
@@ -361,6 +362,7 @@ end = struct
     | Or of t list
     | Is_null of t * bool
     | Equal of t * t
+    | Is_distinct_from of t * t
     | Is_not_distinct_from of t * t
     | Neq of t * t
     | LT of t * t
@@ -477,6 +479,8 @@ end = struct
         Is_null (f e, b)
     | Equal (e1, e2) ->
         Equal (f e1, f e2)
+    | Is_distinct_from (e1, e2) ->
+       Is_distinct_from (f e1, f e2)
     | Is_not_distinct_from (e1, e2) ->
         Is_not_distinct_from (f e1, f e2)
     | Neq (e1, e2) ->
@@ -623,6 +627,8 @@ end = struct
         Format.fprintf fmt "%a IS%s NULL" pp e (if b then "" else " NOT")
     | Equal (e1, e2) ->
         Format.fprintf fmt "%a = %a" pp_parens e1 pp_parens e2
+    | Is_distinct_from (e1, e2) ->
+       Format.fprintf fmt "%a IS DISTINCT FROM %a" pp e1 pp e2
     | Is_not_distinct_from (e1, e2) ->
         Format.fprintf fmt "%a IS NOT DISTINCT FROM %a" pp e1 pp e2
     | Neq (e1, e2) ->
@@ -887,6 +893,8 @@ end = struct
         is_aggregate e
     | Equal (e1, e2) ->
         is_aggregate e1 || is_aggregate e2
+    | Is_distinct_from (e1, e2) ->
+       is_aggregate e1 || is_aggregate e2
     | Is_not_distinct_from (e1, e2) ->
         is_aggregate e1 || is_aggregate e2
     | Neq (e1, e2) ->
@@ -1001,6 +1009,8 @@ end = struct
   let is_not_null e = Is_null (e, false)
 
   let ( = ) e1 e2 = Equal (e1, e2)
+
+  let is_distinct_from e1 e2 = Is_distinct_from (e1, e2)
 
   let is_not_distinct_from e1 e2 = Is_not_distinct_from (e1, e2)
 
