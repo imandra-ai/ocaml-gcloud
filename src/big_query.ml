@@ -90,7 +90,7 @@ module Datasets = struct
     |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     let project_id =
-      project_id |> CCOpt.get_or ~default:token_info.project_id
+      project_id |> CCOption.get_or ~default:token_info.project_id
     in
 
     Lwt.catch
@@ -131,7 +131,7 @@ module Datasets = struct
     |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     let project_id =
-      project_id |> CCOpt.get_or ~default:token_info.project_id
+      project_id |> CCOption.get_or ~default:token_info.project_id
     in
 
     Lwt.catch
@@ -188,7 +188,7 @@ module Datasets = struct
       |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
       >>= fun token_info ->
       let project_id =
-        project_id |> CCOpt.get_or ~default:token_info.project_id
+        project_id |> CCOption.get_or ~default:token_info.project_id
       in
 
       Lwt.catch
@@ -331,7 +331,7 @@ module Jobs = struct
           let array_type =
             array_field_params
             |> CCList.head_opt
-            |> CCOpt.map_or
+            |> CCOption.map_or
                  ~default:(scalar_json (Schema.bq_type_to_yojson default_type))
                  param'_type_to_yojson
           in
@@ -646,12 +646,12 @@ module Jobs = struct
         ; ("cacheHit", `Bool data.cache_hit)
         ]
       ; data.total_rows
-        |> CCOpt.map_or ~default:[] (fun t -> [ ("totalRows", `String t) ])
+        |> CCOption.map_or ~default:[] (fun t -> [ ("totalRows", `String t) ])
       ; data.num_dml_affected_rows
-        |> CCOpt.map_or ~default:[] (fun t ->
+        |> CCOption.map_or ~default:[] (fun t ->
                [ ("numDmlAffectedRows", `String t) ] )
       ; data.page_token
-        |> CCOpt.map_or ~default:[] (fun t -> [ ("pageToken", `String t) ])
+        |> CCOption.map_or ~default:[] (fun t -> [ ("pageToken", `String t) ])
       ]
 
 
@@ -680,10 +680,10 @@ module Jobs = struct
       data.cache_hit
       (CCList.length data.rows)
       ( data.total_rows
-      |> CCOpt.map_or ~default:"" (fun t -> Printf.sprintf " total_rows=%s" t)
+      |> CCOption.map_or ~default:"" (fun t -> Printf.sprintf " total_rows=%s" t)
       )
       ( data.num_dml_affected_rows
-      |> CCOpt.map_or ~default:"" (fun t ->
+      |> CCOption.map_or ~default:"" (fun t ->
              Printf.sprintf " num_dml_affected_rows=%s" t ) )
 
 
@@ -788,7 +788,7 @@ module Jobs = struct
     |> CCResult.flat_map (fun str ->
            str
            |> int_of_string_opt
-           |> CCOpt.to_result
+           |> CCOption.to_result
                 (CCFormat.sprintf "expected an int, but got %S" str) )
 
 
@@ -798,7 +798,7 @@ module Jobs = struct
     | String str ->
         str
         |> float_of_string_opt
-        |> CCOpt.to_result (CCFormat.sprintf "expected a float, but got %S" str)
+        |> CCOption.to_result (CCFormat.sprintf "expected a float, but got %S" str)
     | _ ->
         Error "expected a float (Number or String)"
 
@@ -809,7 +809,7 @@ module Jobs = struct
     | String str ->
         str
         |> bool_of_string_opt
-        |> CCOpt.to_result (CCFormat.sprintf "expected a bool, but got %S" str)
+        |> CCOption.to_result (CCFormat.sprintf "expected a bool, but got %S" str)
     | _ ->
         Error "expected a bool (Bool or String)"
 
@@ -818,7 +818,7 @@ module Jobs = struct
     | Null ->
         Ok None
     | v ->
-        f v |> CCResult.map CCOpt.pure
+        f v |> CCResult.map CCOption.pure
 
 
   let list (f : 'a value_decoder) : 'a list value_decoder = function
@@ -842,6 +842,7 @@ module Jobs = struct
 
 
   let add_gzip_headers ~use_gzip headers =
+    let _ = use_gzip in
     Cohttp.Header.add_list headers gzip_headers
 
 
@@ -864,7 +865,7 @@ module Jobs = struct
 
     let format_options =
       use_int64_timestamp
-      |> CCOpt.map (fun use_int64_timestamp -> { use_int64_timestamp })
+      |> CCOption.map (fun use_int64_timestamp -> { use_int64_timestamp })
     in
 
     let request =
@@ -884,7 +885,7 @@ module Jobs = struct
     |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     let project_id =
-      project_id |> CCOpt.get_or ~default:token_info.project_id
+      project_id |> CCOption.get_or ~default:token_info.project_id
     in
 
     let use_gzip = use_gzip () in
@@ -958,9 +959,9 @@ module Jobs = struct
     let query =
       [ Some ("location", [ job_reference.location ])
       ; page_token
-        |> CCOpt.map (fun page_token -> ("pageToken", [ page_token ]))
+        |> CCOption.map (fun page_token -> ("pageToken", [ page_token ]))
       ; use_int64_timestamp
-        |> CCOpt.map (fun b ->
+        |> CCOption.map (fun b ->
                ("formatOptions.useInt64Timestamp", [ string_of_bool b ]) )
       ]
       |> CCList.filter_map CCFun.id
