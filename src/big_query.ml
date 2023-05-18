@@ -842,8 +842,10 @@ module Jobs = struct
 
 
   let add_gzip_headers ~use_gzip headers =
-    let _ = use_gzip in
-    Cohttp.Header.add_list headers gzip_headers
+    if use_gzip then
+      Cohttp.Header.add_list headers gzip_headers
+    else
+      headers
 
 
   let use_gzip () =

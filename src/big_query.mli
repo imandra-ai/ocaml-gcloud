@@ -164,16 +164,7 @@ module Jobs : sig
     }
 
   val query_response_row_of_yojson :
-    ([> `Assoc of
-        (string * [> `List of [> `Assoc of (string * 'a) list ] list ]) list
-     | `Bool of bool
-     | `Float of float
-     | `List of [> `Assoc of (string * 'a) list ] list
-     | `Null
-     | `String of string ]
-     as
-     'a) ->
-    (query_response_row, string) result
+    Yojson.Safe.t -> (query_response_row, string) result
 
   val query_response_row_to_yojson : query_response_row -> Yojson.Safe.t
   val pp_query_response_data : Format.formatter -> query_response_data -> unit
