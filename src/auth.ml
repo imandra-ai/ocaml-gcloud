@@ -253,16 +253,19 @@ let credentials_of_string (json_str : string) :
 
 let credentials_of_file (credentials_file : string) :
     (credentials, [> `No_credentials | `Bad_credentials_format ]) result Lwt.t =
-  let open Lwt.Infix in
-  Lwt_unix.file_exists credentials_file
-  >>= fun exists ->
+  let open Lwt.Syntax in
+  let* () =
+    L.debug (fun m -> m "Looking for credentials file: %s" credentials_file)
+  in
+  let* exists = Lwt_unix.file_exists credentials_file in
   if not exists
-  then Lwt.return_error `No_credentials
+  then
+    let* () = L.debug (fun m -> m "Not found") in
+    Lwt.return_error `No_credentials
   else
+    let* () = L.debug (fun m -> m "Found") in
     Lwt_io.(with_file ~mode:input) credentials_file (fun input_chan ->
-        Lwt_io.read_lines input_chan
-        |> Lwt_stream.to_list
-        >>= fun lines ->
+        let* lines = Lwt_io.read_lines input_chan |> Lwt_stream.to_list in
         lines |> String.concat "\n" |> credentials_of_string |> Lwt.return )
 
 
@@ -388,13 +391,18 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
       | None ->
           Lwt.return_error `No_credentials
       | Some credentials_file ->
-          let open Lwt_result.Infix in
-          credentials_of_file credentials_file
-          >>= fun credentials ->
-          discover_project_id credentials
-          |> CCOpt.to_result `No_project_id
-          |> Lwt.return
-          >>= fun project_id -> Lwt_result.return (credentials, project_id) )
+          let open Lwt_result.Syntax in
+          let* credentials = credentials_of_file credentials_file in
+          let* () =
+            L.debug (fun m -> m "Trying to find project id:") |> Lwt_result.ok
+          in
+
+          let* project_id =
+            discover_project_id credentials
+            |> CCOpt.to_result `No_project_id
+            |> Lwt.return
+          in
+          Lwt_result.return (credentials, project_id) )
   | Discover_credentials_json_from_env ->
       let credentials_json =
         Sys.getenv_opt Environment_vars.google_application_credentials_json
