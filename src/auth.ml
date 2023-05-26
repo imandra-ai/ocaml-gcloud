@@ -478,7 +478,29 @@ let discover_credentials () : (credentials * string, [> error ]) Lwt_result.t =
   ; Discover_credentials_from_gce_metadata
   ]
   |> List.map (fun discovery_mode () ->
-         discover_credentials_with discovery_mode )
+         let open Lwt.Syntax in
+         let* result = discover_credentials_with discovery_mode in
+         match result with
+         | Ok x ->
+             let* () =
+               L.debug (fun m ->
+                   m
+                     "Success for discovery mode %a"
+                     pp_discovery_mode
+                     discovery_mode )
+             in
+             Lwt_result.return x
+         | Error e ->
+             let* () =
+               L.debug (fun m ->
+                   m
+                     "Error for discovery mode %a: %a"
+                     pp_discovery_mode
+                     discovery_mode
+                     pp_error
+                     e )
+             in
+             Lwt_result.fail e )
   |> first_ok ~error:`No_credentials
 
 
