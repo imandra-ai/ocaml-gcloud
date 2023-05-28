@@ -30,6 +30,10 @@ module Paths = struct
       ]
 end
 
+module Scopes = struct
+  let iam = "https://www.googleapis.com/auth/iam"
+end
+
 module Compute_engine = struct
   module Metadata = struct
     type error = [ `Bad_GCE_metadata_response of Cohttp.Code.status_code ]
@@ -491,56 +495,74 @@ let access_token_of_credentials
         |> Lwt_result.ok
     | External_account (c : External_account_credentials.t) ->
         (* only tested against WIF+Github Actions *)
-        let* () =
-          L.debug (fun m -> m "Requesting subject token") |> Lwt_result.ok
-        in
-        let* subject_token =
-          let subject_token_uri = Uri.of_string c.credential_source.url in
-          let* resp =
-            Cohttp_lwt_unix.Client.get
-              ~headers:(Cohttp.Header.of_list c.credential_source.headers)
-              subject_token_uri
-            |> Lwt_result.ok
-          in
-          External_account_credentials.subject_token_of_response c resp
-        in
-        let* () =
-          L.debug (fun m -> m "Performing token exchange") |> Lwt_result.ok
-        in
-        let token_uri = Uri.of_string c.token_url in
-        let params =
-          `Assoc
-            [ ( "grantType"
-              , `String "urn:ietf:params:oauth:grant-type:token-exchange" )
-            ; ("audience", `String c.audience)
-            ; ("scope", `String (scopes |> CCString.concat " "))
-            ; ( "requestedTokenType"
-              , `String "urn:ietf:params:oauth:token-type:access_token" )
-            ; ("subjectToken", `String subject_token)
-            ; ("subjectTokenType", `String c.subject_token_type)
-            ]
-        in
-        let body = Cohttp_lwt.Body.of_string (Yojson.Basic.to_string params) in
         let* res =
-          Cohttp_lwt_unix.Client.post token_uri ~body |> Lwt_result.ok
+          let* () =
+            L.debug (fun m -> m "Requesting subject token") |> Lwt_result.ok
+          in
+          let* subject_token =
+            let subject_token_uri = Uri.of_string c.credential_source.url in
+            let* resp =
+              Cohttp_lwt_unix.Client.get
+                ~headers:(Cohttp.Header.of_list c.credential_source.headers)
+                subject_token_uri
+              |> Lwt_result.ok
+            in
+            External_account_credentials.subject_token_of_response c resp
+          in
+          let* () =
+            L.debug (fun m -> m "Performing token exchange") |> Lwt_result.ok
+          in
+          let token_uri = Uri.of_string c.token_url in
+          let params =
+            `Assoc
+              [ ( "grantType"
+                , `String "urn:ietf:params:oauth:grant-type:token-exchange" )
+              ; ("audience", `String c.audience)
+              ; ("scope", `String (scopes |> CCString.concat " "))
+              ; ( "requestedTokenType"
+                , `String "urn:ietf:params:oauth:token-type:access_token" )
+              ; ("subjectToken", `String subject_token)
+              ; ("subjectTokenType", `String c.subject_token_type)
+              ]
+          in
+          let body =
+            Cohttp_lwt.Body.of_string (Yojson.Basic.to_string params)
+          in
+          let* res =
+            Cohttp_lwt_unix.Client.post token_uri ~body |> Lwt_result.ok
+          in
+          Lwt_result.return res
         in
         ( match c.service_account_impersonation_url with
         | None ->
             Lwt_result.return res
         | Some sac ->
-            let* initial_access_token = access_token_of_response res in
-            let headers =
-              Cohttp.Header.of_list
-                [ ( "Authorization"
-                  , Printf.sprintf "Bearer %s" initial_access_token.access_token
-                  )
-                ]
+            let req =
+              let* initial_access_token = access_token_of_response res in
+              let headers =
+                Cohttp.Header.of_list
+                  [ ( "Authorization"
+                    , Printf.sprintf
+                        "Bearer %s"
+                        initial_access_token.access_token )
+                  ]
+              in
+              let scopes = [ Scopes.iam ] in
+              let params =
+                `Assoc
+                  [ ("scope", `List (scopes |> CCList.map (fun s -> `String s)))
+                  ]
+              in
+              let body =
+                Cohttp_lwt.Body.of_string (Yojson.Basic.to_string params)
+              in
+              let uri = Uri.of_string sac in
+              let* () =
+                L.debug (fun m -> m "POST %a" Uri.pp_hum uri) |> Lwt_result.ok
+              in
+              Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok
             in
-            let uri = Uri.of_string sac in
-            let* () =
-              L.debug (fun m -> m "POST %a" Uri.pp_hum uri) |> Lwt_result.ok
-            in
-            Cohttp_lwt_unix.Client.post uri ~headers |> Lwt_result.ok )
+            req )
   in
 
   let* res = request in
