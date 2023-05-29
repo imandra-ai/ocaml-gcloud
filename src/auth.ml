@@ -549,7 +549,7 @@ let access_token_of_credentials
                         initial_access_token.access_token )
                   ]
               in
-              let scopes = [ Scopes.cloud_platform ] in
+              (* let scopes = [ Scopes.iam ] in *)
               let params =
                 `Assoc
                   [ ("scope", `List (scopes |> CCList.map (fun s -> `String s)))
@@ -715,6 +715,7 @@ let discover_credentials () : (credentials * string, [> error ]) Lwt_result.t =
 
 let get_access_token ?(scopes : string list = []) () :
     (token_info, [> error ]) Lwt_result.t =
+  let scopes = [ Scopes.iam ] @ scopes in
   let get_new_access_token scopes =
     let open Lwt_result.Infix in
     discover_credentials ()
