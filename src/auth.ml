@@ -311,11 +311,16 @@ type token_info =
 
 let token_info_mvar : token_info option Lwt_mvar.t = Lwt_mvar.create None
 
-let access_token_of_json (json : Yojson.Basic.t) : access_token =
+let access_token_of_json (json : Yojson.Basic.t) : (access_token, error) result
+    =
   let open Yojson.Basic.Util in
-  let access_token = json |> member "access_token" |> to_string in
-  let expires_in = json |> member "expires_in" |> to_int in
-  { access_token; expires_in }
+  try
+    let access_token = json |> member "access_token" |> to_string in
+    let expires_in = json |> member "expires_in" |> to_int in
+    Ok { access_token; expires_in }
+  with
+  | Yojson.Basic.Util.Type_error (_msg, _) ->
+      Error (`Bad_token_response Yojson.Basic.(to_string json))
 
 
 let authorized_user_credentials_of_json (json : Yojson.Basic.t) :
@@ -403,172 +408,203 @@ let credentials_of_file (credentials_file : string) :
 
 
 let access_token_of_response
+    ?(of_json = access_token_of_json)
     ((resp, body) : Cohttp.Response.t * Cohttp_lwt.Body.t) :
     (access_token, [> `Bad_token_response of string ]) result Lwt.t =
-  let open Lwt.Infix in
+  let open Lwt.Syntax in
   match Cohttp.Response.status resp with
   | `OK ->
-      Cohttp_lwt.Body.to_string body
-      >>= fun body_str ->
-      ( try
-          body_str
-          |> Yojson.Basic.from_string
-          |> access_token_of_json
-          |> Lwt.return_ok
-        with
-      | Yojson.Basic.Util.Type_error (_msg, _) ->
-          Lwt.return_error (`Bad_token_response body_str) )
+      let* body_str = Cohttp_lwt.Body.to_string body in
+      body_str |> Yojson.Basic.from_string |> of_json |> Lwt.return
   | _ ->
-      Cohttp_lwt.Body.to_string body
-      >>= fun body_str ->
-      L.err (fun m -> m "response: %s" body_str)
-      >>= fun () -> Lwt.return_error (`Bad_token_response body_str)
+      let* body_str = Cohttp_lwt.Body.to_string body in
+      let* () = L.err (fun m -> m "response: %s" body_str) in
+      Lwt.return_error (`Bad_token_response body_str)
 
 
 let access_token_of_credentials
     (scopes : string list) (credentials : credentials) :
     (access_token, [> `Bad_token_response of string ]) result Lwt.t =
   let open Lwt_result.Syntax in
-  let request =
-    match credentials with
-    | Authorized_user c ->
-        let token_uri =
-          Uri.make
-            ()
-            ~scheme:"https"
-            ~host:"www.googleapis.com"
-            ~path:"oauth2/v4/token"
-        in
-        let params =
-          [ ("client_id", [ c.client_id ])
-          ; ("client_secret", [ c.client_secret ])
-          ; ("refresh_token", [ c.refresh_token ])
-          ; ("grant_type", [ "refresh_token" ])
-          ]
-        in
+  match credentials with
+  | Authorized_user c ->
+      let token_uri =
+        Uri.make
+          ()
+          ~scheme:"https"
+          ~host:"www.googleapis.com"
+          ~path:"oauth2/v4/token"
+      in
+      let params =
+        [ ("client_id", [ c.client_id ])
+        ; ("client_secret", [ c.client_secret ])
+        ; ("refresh_token", [ c.refresh_token ])
+        ; ("grant_type", [ "refresh_token" ])
+        ]
+      in
+      let* res =
         Cohttp_lwt_unix.Client.post_form token_uri ~params |> Lwt_result.ok
-    | Service_account c ->
-        let now = Unix.time () in
-        let* key =
-          Cstruct.of_string c.private_key
-          |> X509.Private_key.decode_pem
-          |> CCResult.map_err (function `Msg msg ->
-                 `Bad_credentials_priv_key msg )
-          |> Lwt.return
-        in
-        ( match key with
-        | `RSA priv_key ->
-            let jwk = Jose.Jwk.make_priv_rsa priv_key in
-            let header = Jose.Header.make_header ~typ:"JWT" jwk in
-            let payload =
-              Jose.Jwt.empty_payload
-              |> Jose.Jwt.add_claim "iss" (`String c.client_email)
-              |> Jose.Jwt.add_claim "scope" (`String (String.concat " " scopes))
-              |> Jose.Jwt.add_claim "aud" (`String c.token_uri)
-              |> Jose.Jwt.add_claim "iat" (`String (Printf.sprintf "%.0f" now))
-              |> Jose.Jwt.add_claim
-                   "exp"
-                   (`String (Printf.sprintf "%.0f" (now +. 3600.)))
-            in
-            let* jwt =
-              Jose.Jwt.sign ~header ~payload jwk
-              |> CCResult.map_err (function `Msg msg -> `Jwt_signing_error msg)
-              |> Lwt.return
-            in
-            let params =
-              [ ("grant_type", [ "urn:ietf:params:oauth:grant-type:jwt-bearer" ])
-              ; ("assertion", [ Jose.Jwt.to_string jwt ])
-              ]
-            in
+      in
+      access_token_of_response ~of_json:access_token_of_json res
+  | Service_account c ->
+      let now = Unix.time () in
+      let* key =
+        Cstruct.of_string c.private_key
+        |> X509.Private_key.decode_pem
+        |> CCResult.map_err (function `Msg msg ->
+               `Bad_credentials_priv_key msg )
+        |> Lwt.return
+      in
+      ( match key with
+      | `RSA priv_key ->
+          let jwk = Jose.Jwk.make_priv_rsa priv_key in
+          let header = Jose.Header.make_header ~typ:"JWT" jwk in
+          let payload =
+            Jose.Jwt.empty_payload
+            |> Jose.Jwt.add_claim "iss" (`String c.client_email)
+            |> Jose.Jwt.add_claim "scope" (`String (String.concat " " scopes))
+            |> Jose.Jwt.add_claim "aud" (`String c.token_uri)
+            |> Jose.Jwt.add_claim "iat" (`String (Printf.sprintf "%.0f" now))
+            |> Jose.Jwt.add_claim
+                 "exp"
+                 (`String (Printf.sprintf "%.0f" (now +. 3600.)))
+          in
+          let* jwt =
+            Jose.Jwt.sign ~header ~payload jwk
+            |> CCResult.map_err (function `Msg msg -> `Jwt_signing_error msg)
+            |> Lwt.return
+          in
+          let params =
+            [ ("grant_type", [ "urn:ietf:params:oauth:grant-type:jwt-bearer" ])
+            ; ("assertion", [ Jose.Jwt.to_string jwt ])
+            ]
+          in
+          let* res =
             Cohttp_lwt_unix.Client.post_form (Uri.of_string c.token_uri) ~params
             |> Lwt_result.ok
-        | _ ->
-            Lwt_result.fail (`Bad_credentials_priv_key "Not RSA key") )
-    | GCE_metadata ->
-        let uri =
-          Printf.sprintf
-            "%s/instance/service-accounts/default/token"
-            Compute_engine.Metadata.metadata_root
-          |> Uri.of_string
-        in
+          in
+          access_token_of_response ~of_json:access_token_of_json res
+      | _ ->
+          Lwt_result.fail (`Bad_credentials_priv_key "Not RSA key") )
+  | GCE_metadata ->
+      let uri =
+        Printf.sprintf
+          "%s/instance/service-accounts/default/token"
+          Compute_engine.Metadata.metadata_root
+        |> Uri.of_string
+      in
+      let* res =
         Cohttp_lwt_unix.Client.get
           uri
           ~headers:Compute_engine.Metadata.metadata_headers
         |> Lwt_result.ok
-    | External_account (c : External_account_credentials.t) ->
-        (* only tested against WIF+Github Actions *)
+      in
+      access_token_of_response ~of_json:access_token_of_json res
+  | External_account (c : External_account_credentials.t) ->
+      (* only tested against WIF+Github Actions *)
+      let* res =
+        let* () =
+          L.debug (fun m -> m "Requesting subject token") |> Lwt_result.ok
+        in
+        let* subject_token =
+          let subject_token_uri = Uri.of_string c.credential_source.url in
+          let* resp =
+            Cohttp_lwt_unix.Client.get
+              ~headers:(Cohttp.Header.of_list c.credential_source.headers)
+              subject_token_uri
+            |> Lwt_result.ok
+          in
+          External_account_credentials.subject_token_of_response c resp
+        in
+        let* () =
+          L.debug (fun m -> m "Performing token exchange") |> Lwt_result.ok
+        in
+        let token_uri = Uri.of_string c.token_url in
+        let params =
+          `Assoc
+            [ ( "grantType"
+              , `String "urn:ietf:params:oauth:grant-type:token-exchange" )
+            ; ("audience", `String c.audience)
+            ; ("scope", `String (scopes |> CCString.concat " "))
+            ; ( "requestedTokenType"
+              , `String "urn:ietf:params:oauth:token-type:access_token" )
+            ; ("subjectToken", `String subject_token)
+            ; ("subjectTokenType", `String c.subject_token_type)
+            ]
+        in
+        let body = Cohttp_lwt.Body.of_string (Yojson.Basic.to_string params) in
         let* res =
+          Cohttp_lwt_unix.Client.post token_uri ~body |> Lwt_result.ok
+        in
+        Lwt_result.return res
+      in
+      ( match c.service_account_impersonation_url with
+      | None ->
+          access_token_of_response ~of_json:access_token_of_json res
+      | Some sac ->
           let* () =
-            L.debug (fun m -> m "Requesting subject token") |> Lwt_result.ok
+            L.debug (fun m -> m "attempting to impersonate service account")
+            |> Lwt_result.ok
           in
-          let* subject_token =
-            let subject_token_uri = Uri.of_string c.credential_source.url in
-            let* resp =
-              Cohttp_lwt_unix.Client.get
-                ~headers:(Cohttp.Header.of_list c.credential_source.headers)
-                subject_token_uri
-              |> Lwt_result.ok
-            in
-            External_account_credentials.subject_token_of_response c resp
+          let* initial_access_token = access_token_of_response res in
+          let headers =
+            Cohttp.Header.of_list
+              [ ( "Authorization"
+                , Printf.sprintf "Bearer %s" initial_access_token.access_token
+                )
+              ]
           in
-          let* () =
-            L.debug (fun m -> m "Performing token exchange") |> Lwt_result.ok
-          in
-          let token_uri = Uri.of_string c.token_url in
+          (* let scopes = [ Scopes.iam ] in *)
           let params =
             `Assoc
-              [ ( "grantType"
-                , `String "urn:ietf:params:oauth:grant-type:token-exchange" )
-              ; ("audience", `String c.audience)
-              ; ("scope", `String (scopes |> CCString.concat " "))
-              ; ( "requestedTokenType"
-                , `String "urn:ietf:params:oauth:token-type:access_token" )
-              ; ("subjectToken", `String subject_token)
-              ; ("subjectTokenType", `String c.subject_token_type)
-              ]
+              [ ("scope", `List (scopes |> CCList.map (fun s -> `String s))) ]
           in
           let body =
             Cohttp_lwt.Body.of_string (Yojson.Basic.to_string params)
           in
-          let* res =
-            Cohttp_lwt_unix.Client.post token_uri ~body |> Lwt_result.ok
+          let uri = Uri.of_string sac in
+          let* () =
+            L.debug (fun m -> m "POST %a" Uri.pp_hum uri) |> Lwt_result.ok
           in
-          Lwt_result.return res
-        in
-        ( match c.service_account_impersonation_url with
-        | None ->
-            Lwt_result.return res
-        | Some sac ->
-            let req =
-              let* initial_access_token = access_token_of_response res in
-              let headers =
-                Cohttp.Header.of_list
-                  [ ( "Authorization"
-                    , Printf.sprintf
-                        "Bearer %s"
-                        initial_access_token.access_token )
-                  ]
-              in
-              (* let scopes = [ Scopes.iam ] in *)
-              let params =
-                `Assoc
-                  [ ("scope", `List (scopes |> CCList.map (fun s -> `String s)))
-                  ]
-              in
-              let body =
-                Cohttp_lwt.Body.of_string (Yojson.Basic.to_string params)
-              in
-              let uri = Uri.of_string sac in
-              let* () =
-                L.debug (fun m -> m "POST %a" Uri.pp_hum uri) |> Lwt_result.ok
-              in
-              Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok
+          let* res =
+            Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok
+          in
+          let access_token_of_json (json : Yojson.Basic.t) :
+              (access_token, error) result =
+            (* has a slightly different format from the access token in the other responses:
+               - camel case fields
+               - expireTime rather than expiresIn
+            *)
+            let open CCResult.Infix in
+            let* access_token, expire_time =
+              try
+                let open Yojson.Basic.Util in
+                let access_token = json |> member "accessToken" |> to_string in
+                let expire_time = json |> member "expireTime" |> to_string in
+                Ok (access_token, expire_time)
+              with
+              | Yojson.Basic.Util.Type_error (_msg, _) ->
+                  Error (`Bad_token_response Yojson.Basic.(to_string json))
             in
-            req )
-  in
-
-  let* res = request in
-  access_token_of_response res
+            let* t, _tz, _count =
+              Ptime.of_rfc3339 expire_time
+              |> CCResult.map_err (fun e ->
+                     `Bad_token_response
+                       (Format.asprintf
+                          "couldn't parse expireTime from: %s"
+                          Yojson.Basic.(to_string json) ) )
+            in
+            let now = Ptime_clock.now () in
+            let* expires_in =
+              match Ptime.diff t now |> Ptime.Span.to_int_s with
+              | None ->
+                  Error (`Bad_token_response Yojson.Basic.(to_string json))
+              | Some expires_in ->
+                  Ok expires_in
+            in
+            Ok { access_token; expires_in }
+          in
+          access_token_of_response ~of_json:access_token_of_json res )
 
 
 let project_id_of_credentials (credentials : credentials) : string option =
