@@ -32,6 +32,8 @@ end
 
 module Scopes = struct
   let iam = "https://www.googleapis.com/auth/iam"
+
+  let cloud_platform = "https://www.googleapis.com/auth/cloud-platform"
 end
 
 module Compute_engine = struct
@@ -547,7 +549,7 @@ let access_token_of_credentials
                         initial_access_token.access_token )
                   ]
               in
-              let scopes = [ Scopes.iam ] in
+              let scopes = [ Scopes.cloud_platform ] in
               let params =
                 `Assoc
                   [ ("scope", `List (scopes |> CCList.map (fun s -> `String s)))
