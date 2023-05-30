@@ -502,6 +502,7 @@ let access_token_of_credentials
       access_token_of_response ~of_json:access_token_of_json res
   | External_account (c : External_account_credentials.t) ->
       (* only tested against WIF+Github Actions *)
+      let scopes = [ Scopes.iam ] @ scopes in
       let* res =
         let* () =
           L.debug (fun m -> m "Requesting subject token") |> Lwt_result.ok
@@ -554,7 +555,6 @@ let access_token_of_credentials
                 )
               ]
           in
-          let scopes = [ Scopes.iam ] in
           let params =
             `Assoc
               [ ("scope", `List (scopes |> CCList.map (fun s -> `String s))) ]
