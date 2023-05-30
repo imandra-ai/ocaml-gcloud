@@ -296,14 +296,20 @@ type credentials =
 
 (* On Google Compute Engine, we don't need credentials *)
 
-type access_token =
-  { access_token : string
-  ; expires_in : int
-  }
+module Access_token = struct
+  type t =
+    { access_token : string
+    ; expires_in : int
+    ; additional_refresh_scopes : string list
+    }
+
+  let make ~access_token ~expires_in ?(additional_refresh_scopes = []) () =
+    { access_token; expires_in; additional_refresh_scopes }
+end
 
 type token_info =
   { credentials : credentials
-  ; token : access_token
+  ; token : Access_token.t
   ; created_at : float
   ; scopes : string list
   ; project_id : string
@@ -311,13 +317,13 @@ type token_info =
 
 let token_info_mvar : token_info option Lwt_mvar.t = Lwt_mvar.create None
 
-let access_token_of_json (json : Yojson.Basic.t) : (access_token, error) result
-    =
+let access_token_of_json (json : Yojson.Basic.t) :
+    (Access_token.t, error) result =
   let open Yojson.Basic.Util in
   try
     let access_token = json |> member "access_token" |> to_string in
     let expires_in = json |> member "expires_in" |> to_int in
-    Ok { access_token; expires_in }
+    Ok (Access_token.make ~access_token ~expires_in ())
   with
   | Yojson.Basic.Util.Type_error (_msg, _) ->
       Error (`Bad_token_response Yojson.Basic.(to_string json))
@@ -410,7 +416,7 @@ let credentials_of_file (credentials_file : string) :
 let access_token_of_response
     ?(of_json = access_token_of_json)
     ((resp, body) : Cohttp.Response.t * Cohttp_lwt.Body.t) :
-    (access_token, [> `Bad_token_response of string ]) result Lwt.t =
+    (Access_token.t, [> `Bad_token_response of string ]) result Lwt.t =
   let open Lwt.Syntax in
   match Cohttp.Response.status resp with
   | `OK ->
@@ -424,7 +430,7 @@ let access_token_of_response
 
 let access_token_of_credentials
     (scopes : string list) (credentials : credentials) :
-    (access_token, [> `Bad_token_response of string ]) result Lwt.t =
+    (Access_token.t, [> `Bad_token_response of string ]) result Lwt.t =
   let open Lwt_result.Syntax in
   match credentials with
   | Authorized_user c ->
@@ -570,7 +576,7 @@ let access_token_of_credentials
             Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok
           in
           let access_token_of_json (json : Yojson.Basic.t) :
-              (access_token, error) result =
+              (Access_token.t, error) result =
             (* has a slightly different format from the access token in the other responses:
                - camel case fields
                - expireTime rather than expiresIn
@@ -602,7 +608,12 @@ let access_token_of_credentials
               | Some expires_in ->
                   Ok expires_in
             in
-            Ok { access_token; expires_in }
+            Ok
+              (Access_token.make
+                 ~access_token
+                 ~expires_in
+                 ~additional_refresh_scopes:[ Scopes.iam ]
+                 () )
           in
           access_token_of_response ~of_json:access_token_of_json res )
 
@@ -752,14 +763,19 @@ let discover_credentials () : (credentials * string, [> error ]) Lwt_result.t =
 let get_access_token ?(scopes : string list = []) () :
     (token_info, [> error ]) Lwt_result.t =
   let get_new_access_token scopes =
-    let open Lwt_result.Infix in
-    discover_credentials ()
-    >>= fun (credentials, project_id) ->
-    access_token_of_credentials scopes credentials
-    >>= fun access_token ->
-    L.info (fun m -> m "Authenticated OK (project: %s)" project_id)
-    |> Lwt_result.ok
-    >|= fun () ->
+    let open Lwt_result.Syntax in
+    let* credentials, project_id = discover_credentials () in
+    let* access_token = access_token_of_credentials scopes credentials in
+    let+ () =
+      L.info (fun m -> m "Authenticated OK (project: %s)" project_id)
+      |> Lwt_result.ok
+    in
+    let scopes =
+      CCList.union
+        ~eq:String.equal
+        scopes
+        access_token.additional_refresh_scopes
+    in
     { credentials
     ; token = access_token
     ; created_at = Unix.time ()
@@ -774,27 +790,28 @@ let get_access_token ?(scopes : string list = []) () :
     Unix.time ()
     > token_info.created_at +. float_of_int token_info.token.expires_in -. 30.
   in
-  let open Lwt.Infix in
-  Lwt_mvar.take token_info_mvar
-  >>= (function
-        | Some token_info
-          when has_requested_scopes token_info && not (is_expired token_info) ->
-            Lwt.return_ok token_info
-        | Some token_info ->
-            ( if is_expired token_info
-            then L.debug (fun m -> m "Re-authenticating: Token is expired")
-            else
-              L.debug (fun m ->
-                  m "Re-authenticating: Token does not have required scopes" )
-            )
-            >>= fun () ->
-            get_new_access_token
-              (CCList.union ~eq:String.equal token_info.scopes scopes)
-        | None ->
-            get_new_access_token scopes )
-  >>= fun token_info_result ->
-  Lwt_mvar.put token_info_mvar (CCResult.to_opt token_info_result)
-  >>= fun () -> Lwt.return token_info_result
+  let open Lwt.Syntax in
+  let* token_info = Lwt_mvar.take token_info_mvar in
+  match token_info with
+  | Some token_info
+    when has_requested_scopes token_info && not (is_expired token_info) ->
+      Lwt.return_ok token_info
+  | Some token_info ->
+      let* () =
+        if is_expired token_info
+        then L.debug (fun m -> m "Re-authenticating: Token is expired")
+        else
+          L.debug (fun m ->
+              m "Re-authenticating: Token does not have required scopes" )
+      in
+      get_new_access_token
+        (CCList.union ~eq:String.equal token_info.scopes scopes)
+  | None ->
+      let* token_info_result = get_new_access_token scopes in
+      let* () =
+        Lwt_mvar.put token_info_mvar (CCResult.to_opt token_info_result)
+      in
+      Lwt.return token_info_result
 
 
 let get_project_id (scopes : string list) =
