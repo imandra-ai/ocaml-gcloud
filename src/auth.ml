@@ -554,7 +554,7 @@ let access_token_of_credentials
                 )
               ]
           in
-          (* let scopes = [ Scopes.iam ] in *)
+          let scopes = [ Scopes.iam ] in
           let params =
             `Assoc
               [ ("scope", `List (scopes |> CCList.map (fun s -> `String s))) ]
