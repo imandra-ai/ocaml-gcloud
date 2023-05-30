@@ -232,9 +232,11 @@ module External_account_credentials = struct
   type t =
     { audience : string
     ; subject_token_type : string
-    ; token_url : string
+    ; token_url : string  (** token exchange endpoint *)
     ; service_account_impersonation_url : string option
+          (** URL of gcloud endpoint to perform service-account impersonation, once authed via token exchange *)
     ; credential_source : credential_source
+          (** Details of how to fetch an initial subject token, to be exchanged for a gcloud token via the endpoint at [token_url] *)
     }
 
   let of_json (json : Yojson.Basic.t) : t =
@@ -507,7 +509,13 @@ let access_token_of_credentials
       in
       access_token_of_response ~of_json:access_token_of_json res
   | External_account (c : External_account_credentials.t) ->
-      (* only tested against WIF+Github Actions *)
+      (* Only tested against Workload Identity Federation via Github Actions. The flow is:
+           - Fetch Github token ("subject token") via the details in [credentials_source]
+           - Exchange the token for a gcloud one via a gcloud endpoint
+           - Once authed via the new token, perform service account impersonation via another endpoint.
+
+         To perform service account impersonation, the IAM scope is required (this is also required on token refresh).
+      *)
       let scopes = [ Scopes.iam ] @ scopes in
       let* res =
         let* () =
