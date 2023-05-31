@@ -803,26 +803,26 @@ let get_access_token ?(scopes : string list = []) () :
   in
   let open Lwt.Syntax in
   let* token_info = Lwt_mvar.take token_info_mvar in
-  match token_info with
-  | Some token_info
-    when has_requested_scopes token_info && not (is_expired token_info) ->
-      Lwt.return_ok token_info
-  | Some token_info ->
-      let* () =
-        if is_expired token_info
-        then L.debug (fun m -> m "Re-authenticating: Token is expired")
-        else
-          L.debug (fun m ->
-              m "Re-authenticating: Token does not have required scopes" )
-      in
-      get_new_access_token
-        (CCList.union ~eq:String.equal token_info.scopes scopes)
-  | None ->
-      let* token_info_result = get_new_access_token scopes in
-      let* () =
-        Lwt_mvar.put token_info_mvar (CCResult.to_opt token_info_result)
-      in
-      Lwt.return token_info_result
+  let* token_info_result =
+    match token_info with
+    | Some token_info
+      when has_requested_scopes token_info && not (is_expired token_info) ->
+        Lwt.return_ok token_info
+    | Some token_info ->
+        let* () =
+          if is_expired token_info
+          then L.debug (fun m -> m "Re-authenticating: Token is expired")
+          else
+            L.debug (fun m ->
+                m "Re-authenticating: Token does not have required scopes" )
+        in
+        get_new_access_token
+          (CCList.union ~eq:String.equal token_info.scopes scopes)
+    | None ->
+        get_new_access_token scopes
+  in
+  let* () = Lwt_mvar.put token_info_mvar (CCResult.to_opt token_info_result) in
+  Lwt.return token_info_result
 
 
 let get_project_id (scopes : string list) =
