@@ -320,7 +320,7 @@ type token_info =
 let token_info_mvar : token_info option Lwt_mvar.t = Lwt_mvar.create None
 
 let access_token_of_json (json : Yojson.Basic.t) :
-    (Access_token.t, error) result =
+    (Access_token.t, [> `Bad_token_response of string ]) result =
   let open Yojson.Basic.Util in
   try
     let access_token = json |> member "access_token" |> to_string in
@@ -584,7 +584,7 @@ let access_token_of_credentials
             Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok
           in
           let access_token_of_json (json : Yojson.Basic.t) :
-              (Access_token.t, error) result =
+              (Access_token.t, [> error ]) result =
             (* has a slightly different format from the access token in the other responses:
                - camel case fields
                - expireTime rather than expiresIn
@@ -754,7 +754,7 @@ let discover_credentials () : (credentials * string, [> error ]) Lwt_result.t =
                      discovery_mode )
              in
              Lwt_result.return x
-         | Error e ->
+         | Error (#error as e) ->
              let* () =
                L.debug (fun m ->
                    m
@@ -764,6 +764,9 @@ let discover_credentials () : (credentials * string, [> error ]) Lwt_result.t =
                      pp_error
                      e )
              in
+             Lwt_result.fail e
+         | Error e ->
+             let* () = L.debug (fun m -> m "Unknown error") in
              Lwt_result.fail e )
   |> first_ok ~error:`No_credentials
 
