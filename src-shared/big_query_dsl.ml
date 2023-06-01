@@ -1231,6 +1231,8 @@ and Query_expr : sig
 
   val pp_select : Format.formatter -> select -> unit
 
+  val pp_select_item : Format.formatter -> select_item -> unit
+
   val pp_from_item : Format.formatter -> from_item -> unit
 
   val pp_join : Format.formatter -> join -> unit
@@ -1464,7 +1466,7 @@ end = struct
         select_body.distinct
         (fun fmt as_struct -> if as_struct then fprintf fmt "AS STRUCT " else ())
         select_body.as_struct
-        (Util.pp_comma_sep_list pp_select_expression)
+        (Util.pp_comma_sep_list pp_select_item)
         select_body.expressions
         (Util.some (fun fmt from_item ->
              fprintf fmt "@ @[<hv 2>FROM@ %a@]" pp_from_item from_item ) )
@@ -1496,7 +1498,7 @@ end = struct
             ts)
 
 
-  and pp_select_expression fmt { expression; alias; except } =
+  and pp_select_item fmt { expression; alias; except } =
     Format.(
       let pp_except fmt names =
         fprintf
