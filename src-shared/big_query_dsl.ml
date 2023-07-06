@@ -239,7 +239,7 @@ module rec Expression : sig
 
   val ceil : t -> t
 
-  val round : t -> t
+  val round : ?places:t -> t -> t
 
   val mod_ : t -> t -> t
 
@@ -1106,7 +1106,7 @@ end = struct
 
   let ceil e = make_fn "CEIL" [ e ]
 
-  let round e = make_fn "ROUND" [ e ]
+  let round ?places e = make_fn "ROUND" (match places with | Some x-> [e; x ] | None-> [ e ])
 
   let mod_ e1 e2 = make_fn "MOD" [ e1; e2 ]
 
