@@ -291,7 +291,11 @@ module rec Expression : sig
 
   val timestamp : t -> t
 
+  val current_timestamp : unit -> t
+
   val timestamp_add : t -> t -> t
+
+  val timestamp_sub : t -> t -> t
 
   val timestamp_diff : t -> t -> date_part -> t
 
@@ -1158,7 +1162,11 @@ end = struct
 
   let timestamp t = make_fn "TIMESTAMP" [ t ]
 
+  let current_timestamp () = make_fn "CURRENT_TIMESTAMP" []
+
   let timestamp_add t interval = make_fn "TIMESTAMP_ADD" [ t; interval ]
+
+  let timestamp_sub t interval = make_fn "TIMESTAMP_SUB" [ t; interval ]
 
   let timestamp_diff t1 t2 date_part = Timestamp_diff (t1, t2, date_part)
 
