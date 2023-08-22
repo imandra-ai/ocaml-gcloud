@@ -261,6 +261,10 @@ module rec Expression : sig
 
   val row_number : unit -> t
 
+  val dense_rank : unit -> t
+
+  val rank : unit -> t
+
   val generate_array : t -> t -> t -> t
 
   val generate_date_array : t -> t -> t -> t
