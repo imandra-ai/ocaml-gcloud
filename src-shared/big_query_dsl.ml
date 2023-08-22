@@ -1132,6 +1132,10 @@ end = struct
 
   let row_number () = make_fn "ROW_NUMBER" [] ~fn_type:Window
 
+  let dense_rank () = make_fn "DENSE_RANK" [] ~fn_type:Window
+
+  let rank () = make_fn "RANK" [] ~fn_type:Window
+
   let generate_array min max step = make_fn "GENERATE_ARRAY" [ min; max; step ]
 
   let generate_date_array min max step =
