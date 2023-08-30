@@ -81,10 +81,10 @@ let list_objects
       let query =
         List.concat
           [ delimiter
-            |> CCOpt.map_or ~default:[] (fun d -> [ ("delimiter", [ d ]) ])
-          ; prefix |> CCOpt.map_or ~default:[] (fun p -> [ ("prefix", [ p ]) ])
+            |> CCOption.map_or ~default:[] (fun d -> [ ("delimiter", [ d ]) ])
+          ; prefix |> CCOption.map_or ~default:[] (fun p -> [ ("prefix", [ p ]) ])
           ; page_token
-            |> CCOpt.map_or ~default:[] (fun t -> [ ("pageToken", [ t ]) ])
+            |> CCOption.map_or ~default:[] (fun t -> [ ("pageToken", [ t ]) ])
           ]
       in
       let uri =
