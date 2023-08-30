@@ -52,7 +52,7 @@ module Compute_engine = struct
     let metadata_ip_root =
       let metadata_ip =
         Sys.getenv_opt Environment_vars.gce_metadata_ip
-        |> CCOpt.get_or ~default:"169.254.169.254"
+        |> CCOption.get_or ~default:"169.254.169.254"
       in
       Printf.sprintf "http://%s" metadata_ip
 
@@ -60,7 +60,7 @@ module Compute_engine = struct
     let metadata_root =
       let host =
         Sys.getenv_opt Environment_vars.gce_metadata_root
-        |> CCOpt.get_or ~default:"metadata.google.internal"
+        |> CCOption.get_or ~default:"metadata.google.internal"
       in
       Printf.sprintf "http://%s/computeMetadata/v1" host
 
@@ -76,9 +76,9 @@ module Compute_engine = struct
     let metadata_default_timeout =
       let default = 3. in
       Sys.getenv_opt Environment_vars.gce_metadata_timeout
-      |> CCOpt.map (fun str ->
+      |> CCOption.map (fun str ->
              try float_of_string str with Failure _ -> default )
-      |> CCOpt.get_or ~default
+      |> CCOption.get_or ~default
 
 
     let response_has_metadata_header (response : Cohttp.Response.t) =
@@ -602,7 +602,7 @@ let access_token_of_credentials
             in
             let* t, _tz, _count =
               Ptime.of_rfc3339 expire_time
-              |> CCResult.map_err (fun e ->
+              |> CCResult.map_err (fun _ ->
                      `Bad_token_response
                        (Format.asprintf
                           "couldn't parse expireTime from: %s"
@@ -635,7 +635,7 @@ let project_id_of_credentials (credentials : credentials) : string option =
 
 
 let discover_project_id (credentials : credentials) : string option =
-  CCOpt.choice
+  CCOption.choice
     [ Sys.getenv_opt Environment_vars.google_project_id
     ; project_id_of_credentials credentials
     ]
@@ -663,7 +663,7 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
 
           let* project_id =
             discover_project_id credentials
-            |> CCOpt.to_result `No_project_id
+            |> CCOption.to_result `No_project_id
             |> Lwt.return
           in
           Lwt_result.return (credentials, project_id) )
@@ -680,7 +680,7 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
           |> Lwt.return
           >>= fun credentials ->
           discover_project_id credentials
-          |> CCOpt.to_result `No_project_id
+          |> CCOption.to_result `No_project_id
           |> Lwt.return
           >>= fun project_id -> Lwt_result.return (credentials, project_id) )
   | Discover_credentials_from_cloud_sdk_path ->

@@ -14,7 +14,7 @@ module Subscriptions = struct
     |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     let project_id =
-      project_id |> CCOpt.get_or ~default:token_info.project_id
+      project_id |> CCOption.get_or ~default:token_info.project_id
     in
 
     let request = { ackIds = ids } in
@@ -89,7 +89,7 @@ module Subscriptions = struct
     |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     let project_id =
-      project_id |> CCOpt.get_or ~default:token_info.project_id
+      project_id |> CCOption.get_or ~default:token_info.project_id
     in
 
     let request =
