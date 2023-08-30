@@ -189,6 +189,7 @@ module Jobs : sig
     -> ?params:Param.query_parameter list
     -> ?location:string
     -> ?use_int64_timestamp:bool
+    -> ?max_results: int
     -> string
     -> (query_response, [> Error.t ]) Lwt_result.t
 
