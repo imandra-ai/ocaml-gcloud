@@ -487,6 +487,7 @@ module Jobs = struct
           [@key "parameterMode"] [@default None]
     ; format_options : data_format_options option
           [@key "formatOptions"] [@default None]
+    ; max_results : int option [@key "maxResults"] [@default None]
     }
   [@@deriving to_yojson]
 
@@ -864,6 +865,7 @@ module Jobs = struct
       ?(params = [])
       ?location
       ?use_int64_timestamp
+      ?max_results
       q : (query_response, [> Error.t ]) Lwt_result.t =
     let parameter_mode =
       if use_legacy_sql || params = [] then None else Some NAMED
@@ -883,6 +885,7 @@ module Jobs = struct
       ; parameter_mode
       ; query_parameters = params
       ; format_options
+      ; max_results
       }
     in
 
