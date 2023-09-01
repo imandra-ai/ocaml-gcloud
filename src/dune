@@ -16,6 +16,8 @@
   logs
   logs.lwt
   ppx_deriving_yojson.runtime
+  ptime
+  ptime.clock.os
   x509
   yojson
   lwt))
