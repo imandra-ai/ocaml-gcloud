@@ -392,12 +392,12 @@ module Jobs = struct
 
 
     let rec struct_param'_to_expression :
-        type a. a struct_param -> Gcloud_shared.Big_query_dsl.Expression.t =
+        type a. a struct_param -> Big_query_dsl.Expression.t =
      fun struct_param ->
-      let module E = Gcloud_shared.Big_query_dsl.Expression in
+      let module E = Big_query_dsl.Expression in
       let rec go :
           type a.
-          a struct_param -> Gcloud_shared.Big_query_dsl.Expression.t list =
+          a struct_param -> Big_query_dsl.Expression.t list =
         function
         | EMPTY ->
             []
@@ -410,8 +410,8 @@ module Jobs = struct
 
 
     and param'_to_expression :
-        type a. a param' -> Gcloud_shared.Big_query_dsl.Expression.t =
-      let module E = Gcloud_shared.Big_query_dsl.Expression in
+        type a. a param' -> Big_query_dsl.Expression.t =
+      let module E = Big_query_dsl.Expression in
       function
       | P_BOOL b ->
           E.(bool b)

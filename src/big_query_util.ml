@@ -1,6 +1,6 @@
 module J = Big_query.Jobs
-module E = Gcloud_shared.Big_query_dsl.Expression
-module Q = Gcloud_shared.Big_query_dsl.Query_expr
+module E = Big_query_dsl.Expression
+module Q = Big_query_dsl.Query_expr
 
 module Debug = struct
   (** Inlines query params as values for simpler debugging via the BigQuery UI in dev *)
