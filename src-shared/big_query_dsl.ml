@@ -289,6 +289,12 @@ module rec Expression : sig
 
   val date : t -> t
 
+  val current_date : unit -> t
+
+  val date_add : t -> t -> t
+
+  val date_sub : t -> t -> t
+
   val substring : t -> t -> t -> t
 
   val replace : t -> t -> t -> t
@@ -1167,6 +1173,12 @@ end = struct
   let datetime_of_date_time date time = make_fn "DATETIME" [ date; time ]
 
   let date timestamp_e = make_fn "DATE" [ timestamp_e ]
+
+  let current_date () = make_fn "CURRENT_DATE" []
+
+  let date_add t interval = make_fn "DATE_ADD" [ t; interval ]
+
+  let date_sub t interval = make_fn "DATE_SUB" [ t; interval ]
 
   let timestamp t = make_fn "TIMESTAMP" [ t ]
 
