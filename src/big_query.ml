@@ -91,7 +91,7 @@ module Datasets = struct
   let get ?project_id ~dataset_id () : (string, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
     Auth.get_access_token ~scopes:[ Scopes.bigquery ] ()
-    |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     let project_id =
       project_id |> CCOption.get_or ~default:token_info.project_id
@@ -132,7 +132,7 @@ module Datasets = struct
   let list ?project_id () : (string, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
     Auth.get_access_token ~scopes:[ Scopes.bigquery ] ()
-    |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     let project_id =
       project_id |> CCOption.get_or ~default:token_info.project_id
@@ -189,7 +189,7 @@ module Datasets = struct
         (resp, [> Error.t ]) Lwt_result.t =
       let open Lwt_result.Infix in
       Auth.get_access_token ~scopes:[ Scopes.bigquery ] ()
-      |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+      |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
       >>= fun token_info ->
       let project_id =
         project_id |> CCOption.get_or ~default:token_info.project_id
@@ -891,7 +891,7 @@ module Jobs = struct
 
     let open Lwt_result.Infix in
     Auth.get_access_token ~scopes:[ Scopes.bigquery ] ()
-    |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     let project_id =
       project_id |> CCOption.get_or ~default:token_info.project_id
@@ -963,7 +963,7 @@ module Jobs = struct
     Lwt.return job_id
     >>= fun job_id ->
     Auth.get_access_token ~scopes:[ Scopes.bigquery ] ()
-    |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     let query =
       [ Some ("location", [ job_reference.location ])

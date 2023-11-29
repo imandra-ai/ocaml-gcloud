@@ -31,7 +31,7 @@ module FirewallRules = struct
       (string, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
     Auth.get_access_token ~scopes:[ Scopes.cloud_platform; Scopes.compute ] ()
-    |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     Lwt.catch
       (fun () ->
@@ -67,7 +67,7 @@ module FirewallRules = struct
       (string, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
     Auth.get_access_token ~scopes:[ Scopes.cloud_platform; Scopes.compute ] ()
-    |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     Lwt.catch
       (fun () ->

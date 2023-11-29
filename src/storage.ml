@@ -7,7 +7,7 @@ let get_object_stream (bucket_name : string) (object_path : string) :
     (string Lwt_stream.t, [> Error.t ]) Lwt_result.t =
   let open Lwt_result.Infix in
   Auth.get_access_token ~scopes:[ Scopes.devstorage_read_only ] ()
-  |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+  |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
   >>= fun token_info ->
   Lwt.catch
     (fun () ->
@@ -74,7 +74,7 @@ let list_objects
     () : (list_objects_response, [> Error.t ]) Lwt_result.t =
   let open Lwt_result.Infix in
   Auth.get_access_token ~scopes:[ Scopes.devstorage_read_only ] ()
-  |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+  |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
   >>= fun token_info ->
   Lwt.catch
     (fun () ->

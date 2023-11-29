@@ -11,7 +11,7 @@ module Subscriptions = struct
       (unit, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
     Auth.get_access_token ~scopes:[ Scopes.pubsub ] ()
-    |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     let project_id =
       project_id |> CCOption.get_or ~default:token_info.project_id
@@ -86,7 +86,7 @@ module Subscriptions = struct
       =
     let open Lwt_result.Infix in
     Auth.get_access_token ~scopes:[ Scopes.pubsub ] ()
-    |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     let project_id =
       project_id |> CCOption.get_or ~default:token_info.project_id
