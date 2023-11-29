@@ -20,6 +20,7 @@ depends: [
   "jose"
   "logs"
   "lwt"
+  "melange"
   "ppx_deriving_yojson"
   "ppx_here" {test}
   "tls" {test}
