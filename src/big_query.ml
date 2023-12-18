@@ -9,24 +9,16 @@ end
 module Schema = struct
   [@@@warning "-39"]
 
-  type mode =
-    | REQUIRED
-    | NULLABLE
-    | REPEATED
+  type mode = REQUIRED | NULLABLE | REPEATED
   [@@deriving show { with_path = false }]
 
   let mode_to_yojson mode = `String (show_mode mode)
 
   let mode_of_yojson = function
-    | `String "REQUIRED" ->
-        Ok REQUIRED
-    | `String "NULLABLE" ->
-        Ok NULLABLE
-    | `String "REPEATED" ->
-        Ok REPEATED
-    | _ ->
-        Error "mode_of_yojson"
-
+    | `String "REQUIRED" -> Ok REQUIRED
+    | `String "NULLABLE" -> Ok NULLABLE
+    | `String "REPEATED" -> Ok REPEATED
+    | _ -> Error "mode_of_yojson"
 
   type bq_type =
     | BOOL
@@ -43,47 +35,32 @@ module Schema = struct
   let bq_type_to_yojson bq_type = `String (show_bq_type bq_type)
 
   let bq_type_of_yojson = function
-    | `String "BOOL" | `String "BOOLEAN" ->
-        Ok BOOL
-    | `String "INTEGER" ->
-        Ok INTEGER
-    | `String "NUMERIC" ->
-        Ok NUMERIC
-    | `String "FLOAT" ->
-        Ok FLOAT
-    | `String "STRING" ->
-        Ok STRING
-    | `String "DATE" ->
-        Ok DATE
-    | `String "TIME" ->
-        Ok TIME
-    | `String "TIMESTAMP" ->
-        Ok TIMESTAMP
-    | `String "RECORD" ->
-        Ok RECORD
-    | j ->
-        Error ("bq_type_of_yojson: " ^ Yojson.Safe.to_string j)
+    | `String "BOOL" | `String "BOOLEAN" -> Ok BOOL
+    | `String "INTEGER" -> Ok INTEGER
+    | `String "NUMERIC" -> Ok NUMERIC
+    | `String "FLOAT" -> Ok FLOAT
+    | `String "STRING" -> Ok STRING
+    | `String "DATE" -> Ok DATE
+    | `String "TIME" -> Ok TIME
+    | `String "TIMESTAMP" -> Ok TIMESTAMP
+    | `String "RECORD" -> Ok RECORD
+    | j -> Error ("bq_type_of_yojson: " ^ Yojson.Safe.to_string j)
 
-
-  type field =
-    { name : string
-    ; description : string option [@default None]
-    ; mode : mode
-    ; bq_type : bq_type [@key "type"]
-    ; fields : field list [@default []]
-    }
+  type field = {
+    name : string;
+    description : string option; [@default None]
+    mode : mode;
+    bq_type : bq_type; [@key "type"]
+    fields : field list; [@default []]
+  }
   [@@deriving make, yojson]
 
   [@@@warning "+39"]
 
   let bq_type_of_field field = field.bq_type
-
   let name_of_field field = field.name
-
   let description_of_field field = field.description
-
   let mode_of_field field = field.mode
-
   let fields_of_field field = field.fields
 end
 
@@ -100,34 +77,25 @@ module Datasets = struct
     Lwt.catch
       (fun () ->
         let uri =
-          Uri.make
-            ()
-            ~scheme:"https"
-            ~host:"www.googleapis.com"
+          Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
             ~path:
-              (Printf.sprintf
-                 "bigquery/v2/projects/%s/datasets/%s"
-                 project_id
-                 dataset_id )
+              (Printf.sprintf "bigquery/v2/projects/%s/datasets/%s" project_id
+                 dataset_id)
         in
         let headers =
           Cohttp.Header.of_list
-            [ ( "Authorization"
-              , Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
+            [
+              ( "Authorization",
+                Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
             ]
         in
-        L.debug (fun m -> m "GET %a" Uri.pp_hum uri)
-        |> Lwt_result.ok
-        >>= fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok
-        )
+        L.debug (fun m -> m "GET %a" Uri.pp_hum uri) |> Lwt_result.ok
+        >>= fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok)
       (fun e -> `Network_error e |> Lwt_result.fail)
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
-    | `OK ->
-        Cohttp_lwt.Body.to_string body |> Lwt_result.ok
-    | x ->
-        Error.of_response_status_code_and_body x body
-
+    | `OK -> Cohttp_lwt.Body.to_string body |> Lwt_result.ok
+    | x -> Error.of_response_status_code_and_body x body
 
   let list ?project_id () : (string, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
@@ -141,48 +109,41 @@ module Datasets = struct
     Lwt.catch
       (fun () ->
         let uri =
-          Uri.make
-            ()
-            ~scheme:"https"
-            ~host:"www.googleapis.com"
+          Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
             ~path:(Printf.sprintf "bigquery/v2/projects/%s/datasets" project_id)
         in
         let headers =
           Cohttp.Header.of_list
-            [ ( "Authorization"
-              , Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
+            [
+              ( "Authorization",
+                Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
             ]
         in
-        L.debug (fun m -> m "GET %a" Uri.pp_hum uri)
-        |> Lwt_result.ok
-        >>= fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok
-        )
+        L.debug (fun m -> m "GET %a" Uri.pp_hum uri) |> Lwt_result.ok
+        >>= fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok)
       (fun e -> `Network_error e |> Lwt_result.fail)
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
-    | `OK ->
-        Cohttp_lwt.Body.to_string body |> Lwt_result.ok
-    | x ->
-        Error.of_response_status_code_and_body x body
-
+    | `OK -> Cohttp_lwt.Body.to_string body |> Lwt_result.ok
+    | x -> Error.of_response_status_code_and_body x body
 
   module Tables = struct
-    type table =
-      { id : string
-      ; kind : string
-      ; friendlyName : string option [@default None]
-      ; expirationTime : string option [@default None]
-      ; creationTime : string
-      }
+    type table = {
+      id : string;
+      kind : string;
+      friendlyName : string option; [@default None]
+      expirationTime : string option; [@default None]
+      creationTime : string;
+    }
     [@@deriving yojson { strict = false }]
 
-    type resp =
-      { tables : table list
-      ; kind : string
-      ; etag : string
-      ; nextPageToken : string option [@default None]
-      ; totalItems : int
-      }
+    type resp = {
+      tables : table list;
+      kind : string;
+      etag : string;
+      nextPageToken : string option; [@default None]
+      totalItems : int;
+    }
     [@@deriving yojson { strict = false }]
 
     let list ?project_id ?max_results ?page_token ~dataset_id () :
@@ -198,62 +159,48 @@ module Datasets = struct
       Lwt.catch
         (fun () ->
           let uri =
-            Uri.make
-              ()
-              ~scheme:"https"
-              ~host:"www.googleapis.com"
+            Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
               ~path:
-                (Printf.sprintf
-                   "bigquery/v2/projects/%s/datasets/%s/tables"
-                   project_id
-                   dataset_id )
+                (Printf.sprintf "bigquery/v2/projects/%s/datasets/%s/tables"
+                   project_id dataset_id)
           in
 
           let uri =
             match max_results with
-            | None ->
-                uri
+            | None -> uri
             | Some max_results ->
-                Uri.add_query_param'
-                  uri
+                Uri.add_query_param' uri
                   ("maxResults", string_of_int max_results)
           in
           let uri =
             match page_token with
-            | None ->
-                uri
+            | None -> uri
             | Some page_token ->
                 Uri.add_query_param' uri ("pageToken", page_token)
           in
           let headers =
             Cohttp.Header.of_list
-              [ ( "Authorization"
-                , Printf.sprintf "Bearer %s" token_info.Auth.token.access_token
-                )
+              [
+                ( "Authorization",
+                  Printf.sprintf "Bearer %s" token_info.Auth.token.access_token
+                );
               ]
           in
-          L.debug (fun m -> m "GET %a" Uri.pp_hum uri)
-          |> Lwt_result.ok
-          >>= fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok
-          )
+          L.debug (fun m -> m "GET %a" Uri.pp_hum uri) |> Lwt_result.ok
+          >>= fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok)
         (fun e -> `Network_error e |> Lwt_result.fail)
       >>= fun (resp, body) ->
       match Cohttp.Response.status resp with
-      | `OK ->
-          Error.parse_body_json resp_of_yojson body
-      | x ->
-          Error.of_response_status_code_and_body x body
+      | `OK -> Error.parse_body_json resp_of_yojson body
+      | x -> Error.of_response_status_code_and_body x body
   end
 end
 
 module Jobs = struct
   module Param = struct
     type numeric
-
     type date
-
     type time
-
     type timestamp
 
     type 'a struct_param =
@@ -274,35 +221,25 @@ module Jobs = struct
     type param = P : 'a param' -> param
 
     let bool s = P_BOOL s
-
     let integer s = P_INTEGER s
-
     let numeric s = P_NUMERIC s
-
     let string s = P_STRING s
-
     let date s = P_DATE s
-
     let time s = P_TIME s
-
     let timestamp s = P_TIMESTAMP s
 
     let array ?(default_type = Schema.STRING) f xs =
       P_ARRAY (default_type, CCList.map f xs)
 
-
     let struct_ s = P_STRUCT s
-
     let empty_struct = EMPTY
-
     let with_field ~name type_ struct_ = FIELD ((name, type_), struct_)
 
     let rec struct_param_type_to_yojson :
         type a. a struct_param -> Yojson.Safe.t =
      fun struct_param ->
       let rec go : type a. a struct_param -> Yojson.Safe.t list = function
-        | EMPTY ->
-            []
+        | EMPTY -> []
         | FIELD ((name, param'), struct_param') ->
             `Assoc
               [ ("name", `String name); ("type", param'_type_to_yojson param') ]
@@ -311,96 +248,68 @@ module Jobs = struct
       `Assoc
         [ ("type", `String "STRUCT"); ("structTypes", `List (go struct_param)) ]
 
-
     and param'_type_to_yojson : type a. a param' -> Yojson.Safe.t =
       let scalar_json value = `Assoc [ ("type", value) ] in
       function
-      | P_BOOL _ ->
-          scalar_json (Schema.bq_type_to_yojson Schema.BOOL)
-      | P_INTEGER _ ->
-          scalar_json (Schema.bq_type_to_yojson Schema.INTEGER)
-      | P_NUMERIC _ ->
-          scalar_json (Schema.bq_type_to_yojson Schema.NUMERIC)
-      | P_STRING _ ->
-          scalar_json (Schema.bq_type_to_yojson Schema.STRING)
-      | P_DATE _ ->
-          scalar_json (Schema.bq_type_to_yojson Schema.DATE)
-      | P_TIME _ ->
-          scalar_json (Schema.bq_type_to_yojson Schema.TIME)
-      | P_TIMESTAMP _ ->
-          scalar_json (Schema.bq_type_to_yojson Schema.TIMESTAMP)
-      | P_STRUCT struct_param ->
-          struct_param_type_to_yojson struct_param
+      | P_BOOL _ -> scalar_json (Schema.bq_type_to_yojson Schema.BOOL)
+      | P_INTEGER _ -> scalar_json (Schema.bq_type_to_yojson Schema.INTEGER)
+      | P_NUMERIC _ -> scalar_json (Schema.bq_type_to_yojson Schema.NUMERIC)
+      | P_STRING _ -> scalar_json (Schema.bq_type_to_yojson Schema.STRING)
+      | P_DATE _ -> scalar_json (Schema.bq_type_to_yojson Schema.DATE)
+      | P_TIME _ -> scalar_json (Schema.bq_type_to_yojson Schema.TIME)
+      | P_TIMESTAMP _ -> scalar_json (Schema.bq_type_to_yojson Schema.TIMESTAMP)
+      | P_STRUCT struct_param -> struct_param_type_to_yojson struct_param
       | P_ARRAY (default_type, array_field_params) ->
           let array_type =
-            array_field_params
-            |> CCList.head_opt
+            array_field_params |> CCList.head_opt
             |> CCOption.map_or
                  ~default:(scalar_json (Schema.bq_type_to_yojson default_type))
                  param'_type_to_yojson
           in
           `Assoc [ ("type", `String "ARRAY"); ("arrayType", array_type) ]
 
-
     let param_type_to_yojson : param -> Yojson.Safe.t = function
-      | P param' ->
-          param'_type_to_yojson param'
-
+      | P param' -> param'_type_to_yojson param'
 
     let rec struct_param_value_to_yojson :
         type a. a struct_param -> Yojson.Safe.t =
      fun struct_param ->
       let rec go : type a. a struct_param -> (string * Yojson.Safe.t) list =
         function
-        | EMPTY ->
-            []
+        | EMPTY -> []
         | FIELD ((name, param'), struct_param') ->
             (name, param'_value_to_yojson param') :: go struct_param'
       in
       `Assoc [ ("structValues", `Assoc (go struct_param)) ]
 
-
     and param'_value_to_yojson : type a. a param' -> Yojson.Safe.t =
       let scalar_json value = `Assoc [ ("value", value) ] in
       function
-      | P_BOOL b ->
-          scalar_json (`Bool b)
-      | P_INTEGER i ->
-          scalar_json (`Int i)
-      | P_NUMERIC s ->
-          scalar_json (`String s)
-      | P_STRING s ->
-          scalar_json (`String s)
-      | P_DATE d ->
-          scalar_json (`String d)
-      | P_TIME d ->
-          scalar_json (`String d)
-      | P_TIMESTAMP d ->
-          scalar_json (`String d)
-      | P_STRUCT struct_param ->
-          struct_param_value_to_yojson struct_param
+      | P_BOOL b -> scalar_json (`Bool b)
+      | P_INTEGER i -> scalar_json (`Int i)
+      | P_NUMERIC s -> scalar_json (`String s)
+      | P_STRING s -> scalar_json (`String s)
+      | P_DATE d -> scalar_json (`String d)
+      | P_TIME d -> scalar_json (`String d)
+      | P_TIMESTAMP d -> scalar_json (`String d)
+      | P_STRUCT struct_param -> struct_param_value_to_yojson struct_param
       | P_ARRAY (_, array_field_params) ->
           `Assoc
-            [ ( "arrayValues"
-              , `List (CCList.map param'_value_to_yojson array_field_params) )
+            [
+              ( "arrayValues",
+                `List (CCList.map param'_value_to_yojson array_field_params) );
             ]
 
-
     let param_value_to_yojson : param -> Yojson.Safe.t = function
-      | P param' ->
-          param'_value_to_yojson param'
-
+      | P param' -> param'_value_to_yojson param'
 
     let rec struct_param'_to_expression :
         type a. a struct_param -> Big_query_dsl.Expression.t =
      fun struct_param ->
       let module E = Big_query_dsl.Expression in
-      let rec go :
-          type a.
-          a struct_param -> Big_query_dsl.Expression.t list =
+      let rec go : type a. a struct_param -> Big_query_dsl.Expression.t list =
         function
-        | EMPTY ->
-            []
+        | EMPTY -> []
         | FIELD ((_name, param'), struct_param') ->
             (* TODO: use the name *)
             param'_to_expression param' :: go struct_param'
@@ -408,47 +317,32 @@ module Jobs = struct
       let es = go struct_param in
       E.struct_ es
 
-
-    and param'_to_expression :
-        type a. a param' -> Big_query_dsl.Expression.t =
+    and param'_to_expression : type a. a param' -> Big_query_dsl.Expression.t =
       let module E = Big_query_dsl.Expression in
       function
-      | P_BOOL b ->
-          E.(bool b)
-      | P_INTEGER i ->
-          E.(int i)
-      | P_NUMERIC s ->
-          E.(numeric s)
-      | P_STRING s ->
-          E.(string s)
-      | P_DATE d ->
-          E.(string d)
-      | P_TIME d ->
-          E.(string d)
-      | P_TIMESTAMP d ->
-          E.(string d)
-      | P_STRUCT struct_param ->
-          struct_param'_to_expression struct_param
+      | P_BOOL b -> E.(bool b)
+      | P_INTEGER i -> E.(int i)
+      | P_NUMERIC s -> E.(numeric s)
+      | P_STRING s -> E.(string s)
+      | P_DATE d -> E.(string d)
+      | P_TIME d -> E.(string d)
+      | P_TIMESTAMP d -> E.(string d)
+      | P_STRUCT struct_param -> struct_param'_to_expression struct_param
       | P_ARRAY (_, array_field_params) ->
           E.array_lit (CCList.map param'_to_expression array_field_params)
 
-
-    type query_parameter =
-      { name : string
-      ; type_ : param
-      }
+    type query_parameter = { name : string; type_ : param }
 
     let make ~name type_ = { name; type_ = P type_ }
-
     let name { name; _ } = name
 
     let query_parameter_to_yojson query_parameter =
       `Assoc
-        [ ("name", `String query_parameter.name)
-        ; ("parameterType", param_type_to_yojson query_parameter.type_)
-        ; ("parameterValue", param_value_to_yojson query_parameter.type_)
+        [
+          ("name", `String query_parameter.name);
+          ("parameterType", param_type_to_yojson query_parameter.type_);
+          ("parameterValue", param_value_to_yojson query_parameter.type_);
         ]
-
 
     let param_to_expression { type_ = P type_; _ } = param'_to_expression type_
 
@@ -456,10 +350,8 @@ module Jobs = struct
       let to_string (p : query_parameter) : string * string =
         let v =
           match param_value_to_yojson p.type_ with
-          | `Assoc [ ("value", v) ] ->
-              Yojson.Safe.to_string v
-          | _ ->
-              failwith "unexpected param JSON"
+          | `Assoc [ ("value", v) ] -> Yojson.Safe.to_string v
+          | _ -> failwith "unexpected param JSON"
         in
         (p.name, v)
     end
@@ -472,30 +364,31 @@ module Jobs = struct
 
   [@@@warning "-39"]
 
-  type data_format_options =
-    { use_int64_timestamp : bool [@key "useInt64Timestamp"] }
+  type data_format_options = {
+    use_int64_timestamp : bool; [@key "useInt64Timestamp"]
+  }
   [@@deriving to_yojson]
 
-  type query_request =
-    { kind : string
-    ; query : string
-    ; dry_run : bool option [@key "dryRun"] [@default None]
-    ; use_legacy_sql : bool [@key "useLegacySql"]
-    ; location : string option [@default None]
-    ; query_parameters : Param.query_parameter list [@key "queryParameters"]
-    ; parameter_mode : parameter_mode option
-          [@key "parameterMode"] [@default None]
-    ; format_options : data_format_options option
-          [@key "formatOptions"] [@default None]
-    ; max_results : int option [@key "maxResults"] [@default None]
-    }
+  type query_request = {
+    kind : string;
+    query : string;
+    dry_run : bool option; [@key "dryRun"] [@default None]
+    use_legacy_sql : bool; [@key "useLegacySql"]
+    location : string option; [@default None]
+    query_parameters : Param.query_parameter list; [@key "queryParameters"]
+    parameter_mode : parameter_mode option;
+        [@key "parameterMode"] [@default None]
+    format_options : data_format_options option;
+        [@key "formatOptions"] [@default None]
+    max_results : int option; [@key "maxResults"] [@default None]
+  }
   [@@deriving to_yojson]
 
-  type job_reference =
-    { job_id : string option [@key "jobId"] [@default None]
-    ; project_id : string [@key "projectId"]
-    ; location : string
-    }
+  type job_reference = {
+    job_id : string option; [@key "jobId"] [@default None]
+    project_id : string; [@key "projectId"]
+    location : string;
+  }
   [@@deriving yojson]
 
   type query_response_schema = { fields : Schema.field list }
@@ -503,17 +396,13 @@ module Jobs = struct
 
   let map_result_l_i f xs =
     let rec go acc i = function
-      | x :: xs ->
-        ( match f i x with
-        | Ok y ->
-            go (y :: acc) (i + 1) xs
-        | Error e ->
-            Error e )
-      | [] ->
-          Ok (List.rev acc)
+      | x :: xs -> (
+          match f i x with
+          | Ok y -> go (y :: acc) (i + 1) xs
+          | Error e -> Error e)
+      | [] -> Ok (List.rev acc)
     in
     go [] 0 xs
-
 
   type value =
     | Null
@@ -525,26 +414,20 @@ module Jobs = struct
 
   let value_of_yojson json =
     let wrapped_value decode = function
-      | `Assoc [ ("v", json) ] ->
-          decode json
-      | _ ->
-          Error {|Expected an object like { "v": value }|}
+      | `Assoc [ ("v", json) ] -> decode json
+      | _ -> Error {|Expected an object like { "v": value }|}
     in
     let rec aux = function
-      | `Null ->
-          Ok Null
-      | `String s ->
-          Ok (String s)
-      | `Float f ->
-          Ok (Number f)
-      | `Bool b ->
-          Ok (Bool b)
+      | `Null -> Ok Null
+      | `String s -> Ok (String s)
+      | `Float f -> Ok (Number f)
+      | `Bool b -> Ok (Bool b)
       | `List jsons ->
           jsons
           |> map_result_l_i (fun i json ->
                  wrapped_value aux json
                  |> CCResult.map_err (fun msg ->
-                        CCFormat.sprintf "element %i: %s" i msg ) )
+                        CCFormat.sprintf "element %i: %s" i msg))
           |> CCResult.map_err (fun msg -> "in list: " ^ msg)
           |> CCResult.map (fun values -> List values)
       | `Assoc [ ("f", `List jsons) ] ->
@@ -552,31 +435,23 @@ module Jobs = struct
           |> map_result_l_i (fun i json ->
                  wrapped_value aux json
                  |> CCResult.map_err (fun msg ->
-                        CCFormat.sprintf "element %i: %s" i msg ) )
+                        CCFormat.sprintf "element %i: %s" i msg))
           |> CCResult.map_err (fun msg -> "in struct: " ^ msg)
           |> CCResult.map (fun values -> Struct values)
-      | _ ->
-          Error {|expected a value|}
+      | _ -> Error {|expected a value|}
     in
     aux json |> CCResult.map_err (fun msg -> "value_of_yojson: " ^ msg)
-
 
   let rec value_to_yojson =
     let wrapped_value enc x = `Assoc [ ("v", enc x) ] in
     function
-    | Null ->
-        `Null
-    | String s ->
-        `String s
-    | Number f ->
-        `Float f
-    | Bool b ->
-        `Bool b
-    | List vs ->
-        `List (CCList.map (wrapped_value value_to_yojson) vs)
+    | Null -> `Null
+    | String s -> `String s
+    | Number f -> `Float f
+    | Bool b -> `Bool b
+    | List vs -> `List (CCList.map (wrapped_value value_to_yojson) vs)
     | Struct vs ->
         `Assoc [ ("f", `List (CCList.map (wrapped_value value_to_yojson) vs)) ]
-
 
   type query_response_row = { f : value list }
 
@@ -584,163 +459,141 @@ module Jobs = struct
     let result =
       value_of_yojson json
       |> CCResult.flat_map (function
-             | Struct values ->
-                 Ok { f = values }
-             | _ ->
-                 Error "expected a Struct" )
+           | Struct values -> Ok { f = values }
+           | _ -> Error "expected a Struct")
     in
     result
     |> CCResult.map_err (fun msg -> "in query_response_row_of_yojson: " ^ msg)
 
-
   let query_response_row_to_yojson { f = values } =
     value_to_yojson (Struct values)
 
-
-  type query_response_data =
-    { schema : query_response_schema
-    ; rows : query_response_row list [@default []]
-    ; page_token : string option [@key "pageToken"] [@default None]
-    ; total_rows : string option [@key "totalRows"] [@default None]
-    ; num_dml_affected_rows : string option
-          [@key "numDmlAffectedRows"] [@default None]
-    ; total_bytes_processed : string [@key "totalBytesProcessed"]
-    ; cache_hit : bool [@key "cacheHit"]
-    }
+  type query_response_data = {
+    schema : query_response_schema;
+    rows : query_response_row list; [@default []]
+    page_token : string option; [@key "pageToken"] [@default None]
+    total_rows : string option; [@key "totalRows"] [@default None]
+    num_dml_affected_rows : string option;
+        [@key "numDmlAffectedRows"] [@default None]
+    total_bytes_processed : string; [@key "totalBytesProcessed"]
+    cache_hit : bool; [@key "cacheHit"]
+  }
   [@@deriving of_yojson { strict = false }]
 
-  type query_response' =
-    { kind : string
-    ; job_reference : job_reference [@key "jobReference"]
-    ; job_complete : bool [@key "jobComplete"]
-    }
+  type query_response' = {
+    kind : string;
+    job_reference : job_reference; [@key "jobReference"]
+    job_complete : bool; [@key "jobComplete"]
+  }
   [@@deriving of_yojson { strict = false }]
 
   [@@@warning "+39"]
 
-  type query_response =
-    { kind : string
-    ; job_reference : job_reference
-    ; job_complete : query_response_data option
-    }
+  type query_response = {
+    kind : string;
+    job_reference : job_reference;
+    job_complete : query_response_data option;
+  }
 
   let query_response_of_yojson (json : Yojson.Safe.t) :
       (query_response, string) result =
     CCResult.(
-      query_response'_of_yojson json
-      >>= fun query_response' ->
+      query_response'_of_yojson json >>= fun query_response' ->
       let query_response =
-        { kind = query_response'.kind
-        ; job_reference = query_response'.job_reference
-        ; job_complete = None
+        {
+          kind = query_response'.kind;
+          job_reference = query_response'.job_reference;
+          job_complete = None;
         }
       in
-      if query_response'.job_complete
-      then
-        query_response_data_of_yojson json
-        >>= fun data -> return { query_response with job_complete = Some data }
+      if query_response'.job_complete then
+        query_response_data_of_yojson json >>= fun data ->
+        return { query_response with job_complete = Some data }
       else return query_response)
-
 
   let query_response_data_to_yojsons (data : query_response_data) :
       (string * Yojson.Safe.t) list =
     List.concat
-      [ [ ("schema", query_response_schema_to_yojson data.schema)
-        ; ("rows", `List (List.map query_response_row_to_yojson data.rows))
-        ; ("totalBytesProcessed", `String data.total_bytes_processed)
-        ; ("cacheHit", `Bool data.cache_hit)
-        ]
-      ; data.total_rows
-        |> CCOption.map_or ~default:[] (fun t -> [ ("totalRows", `String t) ])
-      ; data.num_dml_affected_rows
+      [
+        [
+          ("schema", query_response_schema_to_yojson data.schema);
+          ("rows", `List (List.map query_response_row_to_yojson data.rows));
+          ("totalBytesProcessed", `String data.total_bytes_processed);
+          ("cacheHit", `Bool data.cache_hit);
+        ];
+        data.total_rows
+        |> CCOption.map_or ~default:[] (fun t -> [ ("totalRows", `String t) ]);
+        data.num_dml_affected_rows
         |> CCOption.map_or ~default:[] (fun t ->
-               [ ("numDmlAffectedRows", `String t) ] )
-      ; data.page_token
-        |> CCOption.map_or ~default:[] (fun t -> [ ("pageToken", `String t) ])
+               [ ("numDmlAffectedRows", `String t) ]);
+        data.page_token
+        |> CCOption.map_or ~default:[] (fun t -> [ ("pageToken", `String t) ]);
       ]
-
 
   let query_response_to_yojson (query_response : query_response) : Yojson.Safe.t
       =
     `Assoc
       (List.concat
-         [ [ ("kind", `String query_response.kind)
-           ; ( "jobReference"
-             , job_reference_to_yojson query_response.job_reference )
-           ]
-         ; ( match query_response.job_complete with
-           | None ->
-               [ ("jobComplete", `Bool false) ]
+         [
+           [
+             ("kind", `String query_response.kind);
+             ( "jobReference",
+               job_reference_to_yojson query_response.job_reference );
+           ];
+           (match query_response.job_complete with
+           | None -> [ ("jobComplete", `Bool false) ]
            | Some data ->
                ("jobComplete", `Bool true)
-               :: query_response_data_to_yojsons data )
-         ] )
-
+               :: query_response_data_to_yojsons data);
+         ])
 
   let pp_query_response_data fmt (data : query_response_data) =
-    Format.fprintf
-      fmt
+    Format.fprintf fmt
       "Response: total_bytes_processed=%s cache_hit=%b rows=%d%s%s"
-      data.total_bytes_processed
-      data.cache_hit
-      (CCList.length data.rows)
-      ( data.total_rows
-      |> CCOption.map_or ~default:"" (fun t -> Printf.sprintf " total_rows=%s" t)
-      )
-      ( data.num_dml_affected_rows
+      data.total_bytes_processed data.cache_hit (CCList.length data.rows)
+      (data.total_rows
       |> CCOption.map_or ~default:"" (fun t ->
-             Printf.sprintf " num_dml_affected_rows=%s" t ) )
-
+             Printf.sprintf " total_rows=%s" t))
+      (data.num_dml_affected_rows
+      |> CCOption.map_or ~default:"" (fun t ->
+             Printf.sprintf " num_dml_affected_rows=%s" t))
 
   let pp_query_response fmt (query_response : query_response) =
     let pp_job_id fmt = function
-      | None ->
-          ()
-      | Some job_id ->
-          Format.fprintf fmt " job_id=%s" job_id
+      | None -> ()
+      | Some job_id -> Format.fprintf fmt " job_id=%s" job_id
     in
     match query_response.job_complete with
     | None ->
-        Format.fprintf
-          fmt
-          "Response: %a job_complete=false"
-          pp_job_id
+        Format.fprintf fmt "Response: %a job_complete=false" pp_job_id
           query_response.job_reference.job_id
     | Some data ->
-        Format.fprintf
-          fmt
-          "Response:%a %a"
-          pp_job_id
-          query_response.job_reference.job_id
-          pp_query_response_data
-          data
+        Format.fprintf fmt "Response:%a %a" pp_job_id
+          query_response.job_reference.job_id pp_query_response_data data
 
-
-  type query_response_complete =
-    { kind : string
-    ; job_reference : job_reference
-    ; data : query_response_data
-    }
+  type query_response_complete = {
+    kind : string;
+    job_reference : job_reference;
+    data : query_response_data;
+  }
 
   let query_response_complete_to_yojson
       (query_response_complete : query_response_complete) : Yojson.Safe.t =
     `Assoc
       (List.concat
-         [ [ ("kind", `String query_response_complete.kind)
-           ; ( "jobReference"
-             , job_reference_to_yojson query_response_complete.job_reference )
-           ; ("jobComplete", `Bool false)
-           ]
-         ; query_response_data_to_yojsons query_response_complete.data
-         ] )
-
+         [
+           [
+             ("kind", `String query_response_complete.kind);
+             ( "jobReference",
+               job_reference_to_yojson query_response_complete.job_reference );
+             ("jobComplete", `Bool false);
+           ];
+           query_response_data_to_yojsons query_response_complete.data;
+         ])
 
   type ('a, 'b) decoder = 'a -> ('b, string) result
-
   type 'a data_decoder = (query_response_data, 'a) decoder
-
   type 'a row_decoder = (query_response_row, 'a) decoder
-
   type 'a value_decoder = (value, 'a) decoder
 
   let single_row (f : 'a row_decoder) : 'a data_decoder =
@@ -749,13 +602,11 @@ module Jobs = struct
     | [ row ] ->
         f row
         |> CCResult.map_err (fun msg ->
-               Printf.sprintf "While decoding a single_row: %s" msg )
+               Printf.sprintf "While decoding a single_row: %s" msg)
     | _ ->
         Error
-          (Printf.sprintf
-             "Expected a single row, but got %d rows"
-             (List.length response.rows) )
-
+          (Printf.sprintf "Expected a single row, but got %d rows"
+             (List.length response.rows))
 
   let many_rows (f : 'a row_decoder) : 'a list data_decoder =
    fun response ->
@@ -763,8 +614,7 @@ module Jobs = struct
     |> map_result_l_i (fun i row ->
            f row
            |> CCResult.map_err (fun msg ->
-                  Printf.sprintf "While decoding row %d: %s" i msg ) )
-
+                  Printf.sprintf "While decoding row %d: %s" i msg))
 
   let single_field (f : 'a value_decoder) : 'a row_decoder =
    fun row ->
@@ -772,59 +622,43 @@ module Jobs = struct
     | [ v ] ->
         f v
         |> CCResult.map_err (fun msg ->
-               Printf.sprintf "While decoding a single_field: %s" msg )
+               Printf.sprintf "While decoding a single_field: %s" msg)
     | _ ->
         Error
-          (Printf.sprintf
-             "Expected row with a single field, but got %d fields"
-             (List.length row.f) )
-
+          (Printf.sprintf "Expected row with a single field, but got %d fields"
+             (List.length row.f))
 
   let string : string value_decoder = function
-    | String str ->
-        Ok str
-    | _ ->
-        Error "Expected a string"
-
+    | String str -> Ok str
+    | _ -> Error "Expected a string"
 
   let int : int value_decoder =
    fun v ->
     string v
     |> CCResult.flat_map (fun str ->
-           str
-           |> int_of_string_opt
+           str |> int_of_string_opt
            |> CCOption.to_result
-                (CCFormat.sprintf "expected an int, but got %S" str) )
-
+                (CCFormat.sprintf "expected an int, but got %S" str))
 
   let float : float value_decoder = function
-    | Number f ->
-        Ok f
+    | Number f -> Ok f
     | String str ->
-        str
-        |> float_of_string_opt
-        |> CCOption.to_result (CCFormat.sprintf "expected a float, but got %S" str)
-    | _ ->
-        Error "expected a float (Number or String)"
-
+        str |> float_of_string_opt
+        |> CCOption.to_result
+             (CCFormat.sprintf "expected a float, but got %S" str)
+    | _ -> Error "expected a float (Number or String)"
 
   let bool : bool value_decoder = function
-    | Bool b ->
-        Ok b
+    | Bool b -> Ok b
     | String str ->
-        str
-        |> bool_of_string_opt
-        |> CCOption.to_result (CCFormat.sprintf "expected a bool, but got %S" str)
-    | _ ->
-        Error "expected a bool (Bool or String)"
-
+        str |> bool_of_string_opt
+        |> CCOption.to_result
+             (CCFormat.sprintf "expected a bool, but got %S" str)
+    | _ -> Error "expected a bool (Bool or String)"
 
   let nullable (f : 'a value_decoder) : 'a option value_decoder = function
-    | Null ->
-        Ok None
-    | v ->
-        f v |> CCResult.map CCOption.pure
-
+    | Null -> Ok None
+    | v -> f v |> CCResult.map CCOption.pure
 
   let list (f : 'a value_decoder) : 'a list value_decoder = function
     | List vs ->
@@ -832,41 +666,26 @@ module Jobs = struct
         |> map_result_l_i (fun i v ->
                f v
                |> CCResult.map_err (fun msg ->
-                      CCFormat.sprintf "element %i: %s" i msg ) )
+                      CCFormat.sprintf "element %i: %s" i msg))
         |> CCResult.map_err (fun msg -> CCFormat.sprintf "in list: %s" msg)
-    | _ ->
-        Error "expected a List"
-
+    | _ -> Error "expected a List"
 
   let tag msg result =
     result |> CCResult.map_err (CCFormat.sprintf "%s: %s" msg)
 
-
   let gzip_headers =
     [ ("Accept-Encoding", "deflate, gzip"); ("User-Agent", "gzip") ]
 
-
   let add_gzip_headers ~use_gzip headers =
-    if use_gzip then
-      Cohttp.Header.add_list headers gzip_headers
-    else
-      headers
-
+    if use_gzip then Cohttp.Header.add_list headers gzip_headers else headers
 
   let use_gzip () =
     Sys.getenv_opt "OCAML_GCLOUD_BQ_USE_GZIP"
     |> CCOption.map_or ~default:true bool_of_string
 
-
-  let query
-      ?project_id
-      ?dry_run
-      ?(use_legacy_sql = false)
-      ?(params = [])
-      ?location
-      ?use_int64_timestamp
-      ?max_results
-      q : (query_response, [> Error.t ]) Lwt_result.t =
+  let query ?project_id ?dry_run ?(use_legacy_sql = false) ?(params = [])
+      ?location ?use_int64_timestamp ?max_results q :
+      (query_response, [> Error.t ]) Lwt_result.t =
     let parameter_mode =
       if use_legacy_sql || params = [] then None else Some NAMED
     in
@@ -877,15 +696,16 @@ module Jobs = struct
     in
 
     let request =
-      { kind = "bigquery#queryRequest"
-      ; query = q
-      ; dry_run
-      ; use_legacy_sql
-      ; location
-      ; parameter_mode
-      ; query_parameters = params
-      ; format_options
-      ; max_results
+      {
+        kind = "bigquery#queryRequest";
+        query = q;
+        dry_run;
+        use_legacy_sql;
+        location;
+        parameter_mode;
+        query_parameters = params;
+        format_options;
+        max_results;
       }
     in
 
@@ -902,17 +722,15 @@ module Jobs = struct
     Lwt.catch
       (fun () ->
         let uri =
-          Uri.make
-            ()
-            ~scheme:"https"
-            ~host:"www.googleapis.com"
+          Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
             ~path:(Printf.sprintf "bigquery/v2/projects/%s/queries" project_id)
         in
         let headers =
           Cohttp.Header.of_list
-            [ ( "Authorization"
-              , Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
-            ; ("Content-Type", "application/json")
+            [
+              ( "Authorization",
+                Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
+              ("Content-Type", "application/json");
             ]
           |> add_gzip_headers ~use_gzip
         in
@@ -922,56 +740,49 @@ module Jobs = struct
         let body = body_str |> Cohttp_lwt.Body.of_string in
         L.debug (fun m ->
             let truncate str =
-              if String.length str > 1000
-              then CCString.sub str 0 1000 ^ "..."
+              if String.length str > 1000 then CCString.sub str 0 1000 ^ "..."
               else str
             in
             let q_trimmed =
               q |> CCString.replace ~sub:"\n" ~by:" " |> truncate
             in
-            m "Query: %s" q_trimmed )
+            m "Query: %s" q_trimmed)
         |> Lwt_result.ok
         >>= fun () ->
-        Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok )
+        Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok)
       (fun e -> `Network_error e |> Lwt_result.fail)
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
     | `OK ->
         Error.parse_body_json ~gzipped:use_gzip query_response_of_yojson body
         >>= fun response ->
-        L.debug (fun m -> m "%a" pp_query_response response)
-        |> Lwt_result.ok
+        L.debug (fun m -> m "%a" pp_query_response response) |> Lwt_result.ok
         >>= fun () -> Lwt_result.return response
     | status_code ->
-        Error.of_response_status_code_and_body
-          ~gzipped:use_gzip
-          status_code
+        Error.of_response_status_code_and_body ~gzipped:use_gzip status_code
           body
 
-
-  let get_query_results
-      ?page_token ?use_int64_timestamp (job_reference : job_reference) :
+  let get_query_results ?page_token ?use_int64_timestamp
+      (job_reference : job_reference) :
       (query_response, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
     let job_id =
       match job_reference.job_id with
-      | None ->
-          Error (`Gcloud_retry_timeout "get_query_results: no job_id")
-      | Some job_id ->
-          Ok job_id
+      | None -> Error (`Gcloud_retry_timeout "get_query_results: no job_id")
+      | Some job_id -> Ok job_id
     in
-    Lwt.return job_id
-    >>= fun job_id ->
+    Lwt.return job_id >>= fun job_id ->
     Auth.get_access_token ~scopes:[ Scopes.bigquery ] ()
     |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
     >>= fun token_info ->
     let query =
-      [ Some ("location", [ job_reference.location ])
-      ; page_token
-        |> CCOption.map (fun page_token -> ("pageToken", [ page_token ]))
-      ; use_int64_timestamp
+      [
+        Some ("location", [ job_reference.location ]);
+        page_token
+        |> CCOption.map (fun page_token -> ("pageToken", [ page_token ]));
+        use_int64_timestamp
         |> CCOption.map (fun b ->
-               ("formatOptions.useInt64Timestamp", [ string_of_bool b ]) )
+               ("formatOptions.useInt64Timestamp", [ string_of_bool b ]));
       ]
       |> CCList.filter_map CCFun.id
     in
@@ -979,21 +790,17 @@ module Jobs = struct
     let use_gzip = use_gzip () in
 
     let uri =
-      Uri.make
-        ()
-        ~scheme:"https"
-        ~host:"www.googleapis.com"
+      Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
         ~path:
-          (Printf.sprintf
-             "bigquery/v2/projects/%s/queries/%s"
-             job_reference.project_id
-             job_id )
+          (Printf.sprintf "bigquery/v2/projects/%s/queries/%s"
+             job_reference.project_id job_id)
         ~query
     in
     let headers =
       Cohttp.Header.of_list
-        [ ( "Authorization"
-          , Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
+        [
+          ( "Authorization",
+            Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
         ]
       |> add_gzip_headers ~use_gzip
     in
@@ -1005,49 +812,43 @@ module Jobs = struct
     | `OK ->
         Error.parse_body_json ~gzipped:use_gzip query_response_of_yojson body
         >>= fun response ->
-        L.debug (fun m -> m "%a" pp_query_response response)
-        |> Lwt_result.ok
+        L.debug (fun m -> m "%a" pp_query_response response) |> Lwt_result.ok
         >>= fun () -> Lwt_result.return response
     | status_code ->
-        Error.of_response_status_code_and_body
-          ~gzipped:use_gzip
-          status_code
+        Error.of_response_status_code_and_body ~gzipped:use_gzip status_code
           body
 
-
-  let rec poll_until_complete
-      ?(poll_every_s = 1.) ?(attempts = 5) (query_response : query_response) :
+  let rec poll_until_complete ?(poll_every_s = 1.) ?(attempts = 5)
+      (query_response : query_response) :
       (query_response_complete, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
     match query_response.job_complete with
     | Some data ->
         Lwt.return_ok
-          { kind = query_response.kind
-          ; job_reference = query_response.job_reference
-          ; data
+          {
+            kind = query_response.kind;
+            job_reference = query_response.job_reference;
+            data;
           }
     | None ->
-        if attempts <= 0
-        then
+        if attempts <= 0 then
           Lwt.return_error
             (`Gcloud_retry_timeout
               "Big_query.Jobs.poll_until_complete: maximum number of retries \
-               reached" )
+               reached")
         else
-          Lwt_unix.sleep poll_every_s
-          |> Lwt_result.ok
-          >>= fun () ->
+          Lwt_unix.sleep poll_every_s |> Lwt_result.ok >>= fun () ->
           get_query_results query_response.job_reference
           >>= poll_until_complete ~attempts:(attempts - 1)
-
 
   let fetch_all_rows (response : query_response_complete) =
     let rec aux all_rows (response : query_response_complete) =
       match response.data.page_token with
       | None ->
           Lwt_result.return
-            { response with
-              data = { response.data with rows = Util.List.concat_rev all_rows }
+            {
+              response with
+              data = { response.data with rows = Util.List.concat_rev all_rows };
             }
       | Some page_token ->
           let open Lwt_result.Infix in

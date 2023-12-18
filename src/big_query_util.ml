@@ -12,8 +12,7 @@ module Debug = struct
           match params |> CCList.find_opt (fun p -> J.Param.name p = name) with
           | None ->
               E.(string (Format.asprintf "inlined_param(missing): %s" name))
-          | Some p ->
-              J.Param.param_to_expression p )
+          | Some p -> J.Param.param_to_expression p)
         e
     in
     Q.walk ~f_e:inline_param t

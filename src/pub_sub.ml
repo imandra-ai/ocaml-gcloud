@@ -22,15 +22,10 @@ module Subscriptions = struct
     Lwt.catch
       (fun () ->
         let uri =
-          Uri.make
-            ()
-            ~scheme:"https"
-            ~host:"pubsub.googleapis.com"
+          Uri.make () ~scheme:"https" ~host:"pubsub.googleapis.com"
             ~path:
-              (Printf.sprintf
-                 "/v1/projects/%s/subscriptions/%s:acknowledge"
-                 project_id
-                 subscription_id )
+              (Printf.sprintf "/v1/projects/%s/subscriptions/%s:acknowledge"
+                 project_id subscription_id)
         in
 
         let body_str =
@@ -39,51 +34,41 @@ module Subscriptions = struct
         let body = body_str |> Cohttp_lwt.Body.of_string in
         let headers =
           Cohttp.Header.of_list
-            [ ( "Authorization"
-              , Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
+            [
+              ( "Authorization",
+                Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
             ]
         in
-        Logs_lwt.debug (fun m -> m "POST %a" Uri.pp_hum uri)
-        |> Lwt_result.ok
+        Logs_lwt.debug (fun m -> m "POST %a" Uri.pp_hum uri) |> Lwt_result.ok
         >>= fun () ->
-        Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok )
+        Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok)
       (fun e -> `Network_error e |> Lwt_result.fail)
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
-    | `OK ->
-        Lwt_result.return ()
-    | x ->
-        Error.of_response_status_code_and_body x body
+    | `OK -> Lwt_result.return ()
+    | x -> Error.of_response_status_code_and_body x body
 
-
-  type pull_request =
-    { returnImmediately : bool
-    ; maxMessages : int
-    }
+  type pull_request = { returnImmediately : bool; maxMessages : int }
   [@@deriving yojson]
 
-  type message =
-    { data : string
-    ; message_id : string [@key "messageId"]
-    ; publish_time : string [@key "publishTime"]
-    }
+  type message = {
+    data : string;
+    message_id : string; [@key "messageId"]
+    publish_time : string; [@key "publishTime"]
+  }
   [@@deriving yojson { strict = false }]
 
-  type received_message =
-    { ack_id : string [@key "ackId"]
-    ; message : message
-    }
+  type received_message = { ack_id : string; [@key "ackId"] message : message }
   [@@deriving yojson]
 
-  type received_messages =
-    { received_messages : received_message list
-          [@key "receivedMessages"] [@default []]
-    }
+  type received_messages = {
+    received_messages : received_message list;
+        [@key "receivedMessages"] [@default []]
+  }
   [@@deriving yojson]
 
-  let pull
-      ?project_id ~subscription_id ~max_messages ?(return_immediately = true) ()
-      =
+  let pull ?project_id ~subscription_id ~max_messages
+      ?(return_immediately = true) () =
     let open Lwt_result.Infix in
     Auth.get_access_token ~scopes:[ Scopes.pubsub ] ()
     |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
@@ -99,15 +84,10 @@ module Subscriptions = struct
     Lwt.catch
       (fun () ->
         let uri =
-          Uri.make
-            ()
-            ~scheme:"https"
-            ~host:"pubsub.googleapis.com"
+          Uri.make () ~scheme:"https" ~host:"pubsub.googleapis.com"
             ~path:
-              (Printf.sprintf
-                 "/v1/projects/%s/subscriptions/%s:pull"
-                 project_id
-                 subscription_id )
+              (Printf.sprintf "/v1/projects/%s/subscriptions/%s:pull" project_id
+                 subscription_id)
         in
 
         let body_str =
@@ -116,14 +96,15 @@ module Subscriptions = struct
         let body = body_str |> Cohttp_lwt.Body.of_string in
         let headers =
           Cohttp.Header.of_list
-            [ ( "Authorization"
-              , Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
+            [
+              ( "Authorization",
+                Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
             ]
         in
         Logs_lwt.debug ~src:log_src_pull (fun m -> m "POST %a" Uri.pp_hum uri)
         |> Lwt_result.ok
         >>= fun () ->
-        Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok )
+        Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok)
       (fun e -> `Network_error e |> Lwt_result.fail)
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
@@ -133,12 +114,12 @@ module Subscriptions = struct
         let received_messages =
           received_messages
           |> List.map (fun ({ message; _ } as msg) ->
-                 { msg with
+                 {
+                   msg with
                    message =
-                     { message with data = Base64.decode_exn message.data }
-                 } )
+                     { message with data = Base64.decode_exn message.data };
+                 })
         in
         { received_messages }
-    | x ->
-        Error.of_response_status_code_and_body x body
+    | x -> Error.of_response_status_code_and_body x body
 end
