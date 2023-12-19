@@ -7,7 +7,7 @@
  melange
  (library
   (name gcloud_shared_melange)
-  (public_name gcloud.shared-melange)
+  (public_name gcloud-melange.shared-melange)
   (modes melange)
   (wrapped false))
  (copy_files# "../*.ml")
