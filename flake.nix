@@ -98,34 +98,5 @@
                 pkgs2305.ocamlformat_0_22_4
               ];
           };
-
-
-          # build with nix build '.?submodules=1#ocaml-gcloud'
-          packages.ocaml-gcloud = pkgs.stdenv.mkDerivation {
-            pname = "ocaml-gcloud";
-            version = "1.0.0";
-            buildInputs = (map (p: packages.opamScope.${p}) opamFilePackageNames);
-            buildPhase = ''
-              dune build @install -p gcloud
-            '';
-
-            installPhase = ''
-              echo Nothing to do here yet...
-              mkdir -p $out/
-              # mkdir -p $out/bin
-              # cp _build/install/default/bin/* $out/bin/
-            '';
-
-            src = (fs.toSource {
-              root = ./.;
-
-              # Prevent changes to the nix flake file from busting the build cache.
-              # Add any other files which the build should ignore to this list.
-              fileset = fs.difference ./. (fs.unions [
-                ./flake.nix
-                ./flake.lock
-              ]);
-            });
-          };
         });
 }
