@@ -1,6 +1,7 @@
 (library
  (name gcloud)
  (public_name gcloud)
+ (modules :standard \ cli)
  (preprocess
   (pps ppx_deriving.std ppx_deriving_yojson))
  (libraries
@@ -21,3 +22,10 @@
   x509
   yojson
   lwt))
+
+(executable
+ (name cli)
+ (public_name ocaml-gcloud-cli)
+ (modules cli)
+ (package gcloud)
+ (libraries gcloud))
