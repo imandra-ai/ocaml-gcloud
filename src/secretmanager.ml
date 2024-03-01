@@ -24,7 +24,7 @@ module V1 = struct
           let open Lwt_result.Syntax in
           let* token_info =
             Auth.get_access_token ~scopes:[ Scopes.cloud_platform ] ()
-            |> Lwt_result.map_err (fun e -> `Gcloud_auth_error e)
+            |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
           in
           let* resp, body =
             Lwt.catch
