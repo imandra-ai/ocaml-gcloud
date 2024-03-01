@@ -4,3 +4,6 @@ _opam
 gcloud.install
 _esy
 *.bs.js
+result
+.direnv
+.envrc
