@@ -14,14 +14,9 @@
       url = "github:ocaml/opam-repository";
       flake = false;
     };
-    imandra-opam-repository = {
-      url =
-        "github:imandra-ai/opam-repository/5b5590df81404a6e2fc586dd9cb6a2f969d417b2";
-      flake = false;
-    };
   };
 
-  outputs = { self, nixpkgs, nixpkgs2305, flake-utils, opam-nix, opam-repository, imandra-opam-repository }@inputs:
+  outputs = { self, nixpkgs, nixpkgs2305, flake-utils, opam-nix, opam-repository }@inputs:
     flake-utils.lib.eachDefaultSystem
       (system:
         let
@@ -84,17 +79,6 @@
             utop = "*";
           });
 
-
-          # imandra-extract must be on OCaml 4.12.1
-          imandra-extract = (on.queryToScope
-            {
-              repos = [ opam-repository imandra-opam-repository ];
-            }
-            {
-              "imandra-extract" = "1.1.0-860.47af51daf06019394dd46cd7854cbc24ce038100";
-              ocaml-base-compiler = "4.12.1";
-            }).imandra-extract;
-
         in
 
 
@@ -103,7 +87,6 @@
           formatter = pkgs.nixpkgs-fmt;
 
           packages.opamScope = opamScope;
-          packages.imandra-extract = imandra-extract;
 
           packages.default = pkgs.mkShell {
             buildInputs =
@@ -114,13 +97,6 @@
                 #ocamlformat 0.22.4 is a bit old, so is only in older versions of nixpkgs
                 pkgs2305.ocamlformat_0_22_4
               ];
-
-            # imandra-extract needs to be added to the path manually as below, rather than
-            # to the package list above, otherwise you get clashes between the two
-            # OCaml versions (some LIB related env vars are also set for `buildInputs`).
-            shellHook = ''
-              PATH=${packages.imandra-extract}/bin:$PATH
-            '';
           };
 
 

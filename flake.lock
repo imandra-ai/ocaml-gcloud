@@ -49,23 +49,6 @@
         "type": "github"
       }
     },
-    "imandra-opam-repository": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1700329710,
-        "narHash": "sha256-jKkD2AVcemOIdkTV/L6tmblayYFBlFdPI37eZUy3kzs=",
-        "owner": "imandra-ai",
-        "repo": "opam-repository",
-        "rev": "5b5590df81404a6e2fc586dd9cb6a2f969d417b2",
-        "type": "github"
-      },
-      "original": {
-        "owner": "imandra-ai",
-        "repo": "opam-repository",
-        "rev": "5b5590df81404a6e2fc586dd9cb6a2f969d417b2",
-        "type": "github"
-      }
-    },
     "mirage-opam-overlays": {
       "flake": false,
       "locked": {
@@ -210,7 +193,6 @@
     "root": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "imandra-opam-repository": "imandra-opam-repository",
         "nixpkgs": "nixpkgs",
         "nixpkgs2305": "nixpkgs2305",
         "opam-nix": "opam-nix",
