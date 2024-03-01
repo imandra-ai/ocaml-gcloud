@@ -34,7 +34,7 @@
 
           # List of opam files you which to be read by opam-nix
           opamFiles = [
-            ./my-ocaml-package.opam
+            ./gcloud.opam
 
             # Also include the opam files to any submoduled dependencies
             # ./vendor/some-lib/some-lib.opam
@@ -124,13 +124,13 @@
           };
 
 
-          # build with nix build '.?submodules=1#my-ocaml-package'
-          packages.my-ocaml-package = pkgs.stdenv.mkDerivation {
-            pname = "my-ocaml-package";
+          # build with nix build '.?submodules=1#ocaml-gcloud'
+          packages.ocaml-gcloud = pkgs.stdenv.mkDerivation {
+            pname = "ocaml-gcloud";
             version = "1.0.0";
             buildInputs = (map (p: packages.opamScope.${p}) opamFilePackageNames);
             buildPhase = ''
-              dune build @install -p my-ocaml-package
+              dune build @install -p gcloud
             '';
 
             installPhase = ''
