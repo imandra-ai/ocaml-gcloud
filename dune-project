@@ -35,3 +35,11 @@
  (description "")
  (depends
    melange))
+
+(package
+ (name gcloud-cli)
+ (synopsis "CLI for accessing Google Cloud Platform APIs")
+ (description "For when the official gcloud distribution is too heavyweight.")
+ (depends
+   gcloud
+   cmdliner))

@@ -1,7 +1,7 @@
 _build
 _opam
 .merlin
-gcloud.install
+*.install
 _esy
 *.bs.js
 result
