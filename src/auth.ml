@@ -25,6 +25,17 @@ module Paths = struct
       [
         Sys.getenv "HOME"; ".config/gcloud/application_default_credentials.json";
       ]
+
+  let active_config =
+    String.concat "/" [ Sys.getenv "HOME"; ".config/gcloud/active_config" ]
+
+  let config ~active_config_name =
+    String.concat "/"
+      [
+        Sys.getenv "HOME";
+        ".config/gcloud/configurations";
+        Format.asprintf "config_%s" active_config_name;
+      ]
 end
 
 module Scopes = struct
@@ -98,13 +109,21 @@ end
 
 module Cloud_sdk = struct
   let get_project_id () =
-    Lwt_process.with_process_in
-      ("gcloud", [| "gcloud"; "config"; "get-value"; "core/project" |])
-      (fun process_in ->
-        let open Lwt.Infix in
-        process_in#status >>= fun _status ->
-        Lwt_io.read process_in#stdout >|= String.trim)
-    |> Lwt.map CCOption.some |> ok
+    let open Lwt.Syntax in
+    let* active_config_name =
+      Lwt_io.(
+        with_file ~mode:input Paths.active_config (fun ic -> read_line ic))
+    in
+    let* active_config =
+      Lwt_io.(
+        with_file ~mode:input
+          Paths.(config ~active_config_name)
+          (fun ic -> read ic))
+    in
+    CCString.lines active_config
+    |> CCList.find_map (CCString.Split.left ~by:"project = ")
+    |> CCOption.map (fun (_pre, v) -> v)
+    |> Lwt_result.return
 end
 
 type error =
