@@ -10,6 +10,8 @@ depends: [
   "dune" {>= "3.8"}
   "gcloud"
   "cmdliner"
+  "logs"
+  "tls-lwt"
   "odoc" {with-doc}
 ]
 build: [

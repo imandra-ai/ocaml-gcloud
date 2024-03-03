@@ -21,7 +21,7 @@ module V1 = struct
           @param name Required. The resource name of the SecretVersion in the format [projects/*/secrets/*/versions/*].[projects/*/secrets/*/versions/latest] is an alias to the most recently created [SecretVersion].
        *)
 
-        let access_inner ~access_token ~project_id (name : string) :
+        let access_inner ~access_token (name : string) :
             (response, [< Error.t ]) Lwt_result.t =
           let open Lwt_result.Syntax in
           let* resp, body =
@@ -53,8 +53,7 @@ module V1 = struct
             Auth.get_access_token ~scopes:[ Scopes.cloud_platform ] ()
             |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
           in
-          access_inner ~project_id:token_info.project_id
-            ~access_token:token_info.token.access_token name
+          access_inner ~access_token:token_info.token.access_token name
       end
     end
   end

@@ -42,4 +42,6 @@
  (description "For when the official gcloud distribution is too heavyweight.")
  (depends
    gcloud
-   cmdliner))
+   cmdliner
+   logs
+   tls-lwt))
