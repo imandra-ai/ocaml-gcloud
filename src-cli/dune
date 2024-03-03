@@ -1,0 +1,12 @@
+(library
+ (name cli)
+ (modules :standard \ main)
+ (package gcloud-cli)
+ (libraries gcloud cmdliner logs))
+
+(executable
+ (name main)
+ (public_name gcloud-cli)
+ (modules main)
+ (package gcloud-cli)
+ (libraries cli))
