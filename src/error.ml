@@ -27,7 +27,8 @@ type t =
   | `Gcloud_retry_timeout of string
   | `Json_parse_error of string * string (* error, raw json *)
   | `Json_transform_error of string * Yojson.Safe.t (* error, raw json *)
-  | `Network_error of exn ]
+  | `Network_error of exn
+  | `Msg of string ]
 
 let pp fmt (error : t) =
   match error with
@@ -48,6 +49,7 @@ let pp fmt (error : t) =
         (Yojson.Safe.to_string json_str)
   | `Network_error exn ->
       Format.fprintf fmt "Network error: %s" (Printexc.to_string exn)
+  | `Msg s -> Format.fprintf fmt "Msg: %s" s
 
 let parse_body_json ?(gzipped = false)
     (transform : Yojson.Safe.t -> ('a, string) result)
