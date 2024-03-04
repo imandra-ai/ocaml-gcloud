@@ -117,7 +117,7 @@
 
           packages.default = pkgs.mkShell {
             buildInputs =
-              (map (p: packages.opamScope.${p}) opamFilePackageNames) ++ [
+              (map (p: opamScope.${p}) opamFilePackageNames) ++ [
                 devOpamScope.utop
                 devOpamScope.ocaml-lsp-server
 
