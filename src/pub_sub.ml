@@ -10,13 +10,8 @@ module Subscriptions = struct
   let acknowledge ?project_id ~subscription_id ~ids () :
       (unit, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
-    Auth.get_access_token ~scopes:[ Scopes.pubsub ] ()
-    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
-    >>= fun token_info ->
-    let project_id =
-      project_id |> CCOption.get_or ~default:token_info.project_id
-    in
-
+    Common.get_access_token ~scopes:[ Scopes.pubsub ] () >>= fun token_info ->
+    Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
     let request = { ackIds = ids } in
 
     Lwt.catch
@@ -70,13 +65,8 @@ module Subscriptions = struct
   let pull ?project_id ~subscription_id ~max_messages
       ?(return_immediately = true) () =
     let open Lwt_result.Infix in
-    Auth.get_access_token ~scopes:[ Scopes.pubsub ] ()
-    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
-    >>= fun token_info ->
-    let project_id =
-      project_id |> CCOption.get_or ~default:token_info.project_id
-    in
-
+    Common.get_access_token ~scopes:[ Scopes.pubsub ] () >>= fun token_info ->
+    Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
     let request =
       { maxMessages = max_messages; returnImmediately = return_immediately }
     in

@@ -32,19 +32,19 @@ module Projects = struct
 
       [@@@warning "+39"]
 
-      let get ~(project : string) ~(location : string) ~(cluster : string) :
+      let get ?project_id ~(location : string) ~(cluster : string) () :
           (t, [> Error.t ]) Lwt_result.t =
         let open Lwt_result.Infix in
-        Auth.get_access_token ~scopes:[ Scopes.cloud_platform ] ()
-        |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
+        Common.get_access_token ~scopes:[ Scopes.cloud_platform ] ()
         >>= fun token_info ->
+        Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
         Lwt.catch
           (fun () ->
             let uri =
               Uri.make () ~scheme:"https" ~host:"container.googleapis.com"
                 ~path:
                   (Printf.sprintf "v1beta1/projects/%s/locations/%s/clusters/%s"
-                     project location cluster)
+                     project_id location cluster)
             in
             let headers =
               Cohttp.Header.of_list

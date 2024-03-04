@@ -25,18 +25,19 @@ module FirewallRules = struct
 
   [@@@warning "+39"]
 
-  let insert ~(project : string) ~(rule : rule) :
-      (string, [> Error.t ]) Lwt_result.t =
+  let insert ?project_id ~(rule : rule) () : (string, [> Error.t ]) Lwt_result.t
+      =
     let open Lwt_result.Infix in
-    Auth.get_access_token ~scopes:[ Scopes.cloud_platform; Scopes.compute ] ()
-    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
+    Common.get_access_token ~scopes:[ Scopes.cloud_platform; Scopes.compute ] ()
     >>= fun token_info ->
+    Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
     Lwt.catch
       (fun () ->
         let uri =
           Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
             ~path:
-              (Printf.sprintf "compute/v1/projects/%s/global/firewalls" project)
+              (Printf.sprintf "compute/v1/projects/%s/global/firewalls"
+                 project_id)
         in
         let headers =
           Cohttp.Header.of_list
@@ -56,19 +57,19 @@ module FirewallRules = struct
     | `OK -> Lwt_result.ok (Cohttp_lwt.Body.to_string body)
     | status_code -> Error.of_response_status_code_and_body status_code body
 
-  let delete ~(project : string) ~(name : string) :
+  let delete ?project_id ~(name : string) () :
       (string, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
-    Auth.get_access_token ~scopes:[ Scopes.cloud_platform; Scopes.compute ] ()
-    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
+    Common.get_access_token ~scopes:[ Scopes.cloud_platform; Scopes.compute ] ()
     >>= fun token_info ->
+    Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
     Lwt.catch
       (fun () ->
         let uri =
           Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
             ~path:
               (Printf.sprintf "compute/v1/projects/%s/global/firewalls/%s"
-                 project name)
+                 project_id name)
         in
         let headers =
           Cohttp.Header.of_list
