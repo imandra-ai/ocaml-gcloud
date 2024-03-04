@@ -708,13 +708,21 @@ let project_id_of_credentials (credentials : credentials) : string option =
   | Authorized_user _ | External_account _ -> None
 
 (** [project_id] optional arg is a convenience where project_id is optionally
-    available for the caller (e.g. a CLI entrypoint where --project-id X may or may
-    not have been passed) *)
+    available for the caller, e.g. a CLI entrypoint where --project-id X may or may
+    not have been passed *)
 let get_project_id ?project_id ~token_info () =
   let open Lwt_result.Syntax in
-  CCOption.choice
-    [
-      project_id;
-      Sys.getenv_opt Environment_vars.google_project_id;
-      project_id_of_credentials token_info.credentials;
-    ]
+  match
+    CCOption.choice
+      [
+        project_id;
+        Sys.getenv_opt Environment_vars.google_project_id;
+        project_id_of_credentials token_info.credentials;
+      ]
+  with
+  | Some project_id -> Lwt_result.return project_id
+  | None -> (
+      let* pid = Cloud_sdk.get_project_id () in
+      match pid with
+      | Some project_id -> Lwt_result.return project_id
+      | None -> Lwt_result.fail `No_project_id)
