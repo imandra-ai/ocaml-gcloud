@@ -42,3 +42,7 @@ let get_project_id ?project_id ~token_info () =
       match pid with
       | Some project_id -> Lwt_result.return project_id
       | None -> Lwt_result.fail `No_project_id)
+
+let get_access_token ?scopes () : (Auth.token_info, [> Error.t ]) Lwt_result.t =
+  Auth.get_access_token ?scopes ()
+  |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
