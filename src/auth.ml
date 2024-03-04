@@ -273,11 +273,13 @@ module External_account_credentials = struct
         Lwt.return_error (`Bad_subject_token_response (resp, body_str))
 end
 
+type gce_metadata_details = { project_id : string }
+
 type credentials =
   | Authorized_user of user_refresh_credentials
   | Service_account of service_account_credentials
   | External_account of External_account_credentials.t
-  | GCE_metadata
+  | GCE_metadata of gce_metadata_details
 
 (* On Google Compute Engine, we don't need credentials *)
 
@@ -458,7 +460,7 @@ let access_token_of_credentials (scopes : string list)
           in
           access_token_of_response ~of_json:access_token_of_json res
       | _ -> Lwt_result.fail (`Bad_credentials_priv_key "Not RSA key"))
-  | GCE_metadata ->
+  | GCE_metadata _ ->
       let uri =
         Printf.sprintf "%s/instance/service-accounts/default/token"
           Compute_engine.Metadata.metadata_root
@@ -573,10 +575,11 @@ let access_token_of_credentials (scopes : string list)
           access_token_of_response ~of_json:access_token_of_json res)
 
 let discover_credentials_with (discovery_mode : discovery_mode) =
-  let open Lwt.Infix in
-  L.debug (fun m ->
-      m "Attempting authentication using %a" pp_discovery_mode discovery_mode)
-  >>= fun () ->
+  let open Lwt.Syntax in
+  let* () =
+    L.debug (fun m ->
+        m "Attempting authentication using %a" pp_discovery_mode discovery_mode)
+  in
   match discovery_mode with
   | Discover_credentials_path_from_env -> (
       let credentials_file =
@@ -584,10 +587,7 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
       in
       match credentials_file with
       | None -> Lwt.return_error `No_credentials
-      | Some credentials_file ->
-          let open Lwt_result.Syntax in
-          let* credentials = credentials_of_file credentials_file in
-          Lwt_result.return credentials)
+      | Some credentials_file -> credentials_of_file credentials_file)
   | Discover_credentials_json_from_env -> (
       let credentials_json =
         Sys.getenv_opt Environment_vars.google_application_credentials_json
@@ -596,23 +596,26 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
       | None -> Lwt.return_error `No_credentials
       | Some json_str -> credentials_of_string json_str |> Lwt.return)
   | Discover_credentials_from_cloud_sdk_path ->
-      let open Lwt_result.Infix in
       credentials_of_file Paths.application_default_credentials
   | Discover_credentials_from_gce_metadata ->
       let ping =
         Lwt.catch
           (fun () ->
-            Compute_engine.Metadata.ping () >>= fun (resp, _body) ->
+            let open Lwt_result.Syntax in
+            let* resp, _body = Compute_engine.Metadata.ping () |> ok in
             match Cohttp.Response.status resp with
             | `OK when Compute_engine.Metadata.response_has_metadata_header resp
               ->
-                Lwt_result.return GCE_metadata
+                let* project_id = Compute_engine.Metadata.get_project_id () in
+                Lwt_result.return (GCE_metadata { project_id })
             | _ -> Lwt.return_error `No_credentials)
           (fun _exn -> Lwt.return_error `No_credentials)
       in
       let timeout =
-        Lwt_unix.sleep Compute_engine.Metadata.metadata_default_timeout
-        >>= fun () -> Lwt.return_error `No_credentials
+        let* () =
+          Lwt_unix.sleep Compute_engine.Metadata.metadata_default_timeout
+        in
+        Lwt.return_error `No_credentials
       in
       Lwt.pick [ ping; timeout ]
 
@@ -700,31 +703,18 @@ let get_access_token ?(scopes : string list = []) () :
 
 let project_id_of_credentials (credentials : credentials) : string option =
   match credentials with
-  | Service_account { project_id; _ } -> Some project_id
-  | Authorized_user _ | External_account _ | GCE_metadata -> None
+  | Service_account { project_id; _ } | GCE_metadata { project_id } ->
+      Some project_id
+  | Authorized_user _ | External_account _ -> None
 
 (** [project_id] optional arg is a convenience where project_id is optionally
     available for the caller (e.g. a CLI entrypoint where --project-id X may or may
     not have been passed) *)
-let get_project_id ?project_id (scopes : string list) =
+let get_project_id ?project_id ~token_info () =
   let open Lwt_result.Syntax in
-  let static_project_id =
-    CCOption.choice
-      [ project_id; Sys.getenv_opt Environment_vars.google_project_id ]
-  in
-  match static_project_id with
-  | Some project_id -> Lwt_result.return project_id
-  | None -> (
-      let* token_info = get_access_token ~scopes () in
-      let* project_id =
-        match token_info.credentials with
-        | Service_account { project_id; _ } ->
-            Lwt_result.return (Some project_id)
-        | GCE_metadata ->
-            Compute_engine.Metadata.get_project_id ()
-            |> Lwt_result.map CCOption.some
-        | _ -> Cloud_sdk.get_project_id ()
-      in
-      match project_id with
-      | None -> Lwt_result.fail `No_project_id
-      | Some p -> Lwt_result.return p)
+  CCOption.choice
+    [
+      project_id;
+      Sys.getenv_opt Environment_vars.google_project_id;
+      project_id_of_credentials token_info.credentials;
+    ]
