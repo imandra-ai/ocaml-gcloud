@@ -3,6 +3,7 @@ open Cmdliner
 let src = Logs.Src.create "ocaml-gcloud.cli"
 
 module Log = (val Logs.src_log src : Logs.LOG)
+module Log_lwt = (val Logs_lwt.src_log src : Logs_lwt.LOG)
 
 let help_secs = [ `S Manpage.s_common_options ]
 let sdocs = Manpage.s_common_options
@@ -34,19 +35,21 @@ let copts_t =
     const (fun project_id log_levels -> copts ~project_id ~log_levels)
     $ project_id $ log_levels)
 
-let print_result ~pp = function
-  | Ok x -> Log.app (fun m -> m "%a" pp x)
-  | Error e -> Log.err (fun m -> m "%a" Gcloud.Error.pp e)
-
 let main ~copts ~pp f =
   Cli_logs.setup copts.log_levels;
   let lwt =
     let open Lwt.Syntax in
     let* result = f () in
-    let () = print_result ~pp result in
-    Lwt.return ()
+    let* () =
+      match result with
+      | Ok x -> Log_lwt.app (fun m -> m "%a" pp x)
+      | Error e ->
+          let* () = Log_lwt.app (fun m -> m "Error: %a" Gcloud.Error.pp e) in
+          exit 1
+    in
+    Lwt.return result
   in
-  Lwt_main.run lwt
+  match Lwt_main.run lwt with Error _ -> exit 1 | _ -> exit 0
 
 module Secrets = struct
   module Versions = struct
