@@ -107,25 +107,6 @@ module Compute_engine = struct
   end
 end
 
-module Cloud_sdk = struct
-  let get_project_id () =
-    let open Lwt.Syntax in
-    let* active_config_name =
-      Lwt_io.(
-        with_file ~mode:input Paths.active_config (fun ic -> read_line ic))
-    in
-    let* active_config =
-      Lwt_io.(
-        with_file ~mode:input
-          Paths.(config ~active_config_name)
-          (fun ic -> read ic))
-    in
-    CCString.lines active_config
-    |> CCList.find_map (CCString.Split.left ~by:"project = ")
-    |> CCOption.map (fun (_pre, v) -> v)
-    |> Lwt_result.return
-end
-
 type error =
   [ `Bad_token_response of string
   | `Bad_credentials_format
@@ -700,29 +681,3 @@ let get_access_token ?(scopes : string list = []) () :
   in
   let* () = Lwt_mvar.put token_info_mvar (CCResult.to_opt token_info_result) in
   Lwt.return token_info_result
-
-let project_id_of_credentials (credentials : credentials) : string option =
-  match credentials with
-  | Service_account { project_id; _ } | GCE_metadata { project_id } ->
-      Some project_id
-  | Authorized_user _ | External_account _ -> None
-
-(** [project_id] optional arg is a convenience where project_id is optionally
-    available for the caller, e.g. a CLI entrypoint where --project-id X may or may
-    not have been passed *)
-let get_project_id ?project_id ~token_info () =
-  let open Lwt_result.Syntax in
-  match
-    CCOption.choice
-      [
-        project_id;
-        Sys.getenv_opt Environment_vars.google_project_id;
-        project_id_of_credentials token_info.credentials;
-      ]
-  with
-  | Some project_id -> Lwt_result.return project_id
-  | None -> (
-      let* pid = Cloud_sdk.get_project_id () in
-      match pid with
-      | Some project_id -> Lwt_result.return project_id
-      | None -> Lwt_result.fail `No_project_id)
