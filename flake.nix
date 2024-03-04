@@ -47,6 +47,7 @@
           opamScope = (on.buildOpamProject'
             {
               repos = [ opam-repository ];
+              resolveArgs.with-test = true;
               recursive = true;
               overlays = on.__overlays ++ [
                 (final: prev:
