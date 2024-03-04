@@ -113,7 +113,6 @@ type error =
   | `Bad_credentials_priv_key of string
   | `Jwt_signing_error of string
   | `No_credentials
-  | `No_project_id
   | `Bad_subject_token_response of Cohttp.Response.t * string
   | Compute_engine.Metadata.error ]
 
@@ -133,9 +132,6 @@ let pp_error fmt (error : error) =
       Format.fprintf fmt
         "Unexpected response (%s) while fetching subject token: %s" status_str
         body_str
-  | `No_project_id ->
-      Format.fprintf fmt "Could not discover the project ID (try setting %s)"
-        Environment_vars.google_project_id
   | #Compute_engine.Metadata.error as e ->
       Compute_engine.Metadata.pp_error fmt e
 

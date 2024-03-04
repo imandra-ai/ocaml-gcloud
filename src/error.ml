@@ -28,6 +28,7 @@ type t =
   | `Json_parse_error of string * string (* error, raw json *)
   | `Json_transform_error of string * Yojson.Safe.t (* error, raw json *)
   | `Network_error of exn
+  | `No_project_id
   | `Msg of string ]
 
 let pp fmt (error : t) =
@@ -49,6 +50,9 @@ let pp fmt (error : t) =
         (Yojson.Safe.to_string json_str)
   | `Network_error exn ->
       Format.fprintf fmt "Network error: %s" (Printexc.to_string exn)
+  | `No_project_id ->
+      Format.fprintf fmt "Could not discover the project ID (try setting %s)"
+        Auth.Environment_vars.google_project_id
   | `Msg s -> Format.fprintf fmt "Msg: %s" s
 
 let parse_body_json ?(gzipped = false)
