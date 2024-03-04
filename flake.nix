@@ -81,6 +81,31 @@
             utop = "*";
           });
 
+          gcloud-cli = pkgs.stdenv.mkDerivation {
+            pname = "gcloud-cli";
+            version = "1.0.0";
+            buildInputs = (map (p: opamScope.${p}) opamFilePackageNames);
+            buildPhase = ''
+              dune build @install -p gcloud,gcloud-cli
+            '';
+
+            installPhase = ''
+              mkdir -p $out/bin
+              cp _build/install/default/bin/* $out/bin/
+            '';
+
+            src = (fs.toSource {
+              root = ./.;
+
+              # Prevent changes to the nix flake file from busting the build cache.
+              # Add any other files which the build should ignore to this list.
+              fileset = fs.difference ./. (fs.unions [
+                ./flake.nix
+                ./flake.lock
+              ]);
+            });
+          };
+
         in
 
 
@@ -88,7 +113,7 @@
           # for use by nix fmt
           formatter = pkgs.nixpkgs-fmt;
 
-          packages.opamScope = opamScope;
+          packages.gcloud-cli = gcloud-cli;
 
           packages.default = pkgs.mkShell {
             buildInputs =
