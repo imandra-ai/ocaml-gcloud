@@ -2,8 +2,9 @@ let tests : unit Alcotest_lwt.test_case list =
   [
     Alcotest_lwt.test_case "projects.locations.clusters.get" `Quick (fun _ () ->
         let open Lwt.Infix in
-        Gcloud.Container.Projects.Locations.Clusters.get ~project:"imandra-dev"
-          ~location:"europe-west1-c" ~cluster:"imandra-markets-dev-cluster"
+        Gcloud.Container.Projects.Locations.Clusters.get
+          ~project_id:"imandra-dev" ~location:"europe-west1-c"
+          ~cluster:"imandra-markets-dev-cluster" ()
         >>= function
         | Ok c ->
             Alcotest.(check string)
