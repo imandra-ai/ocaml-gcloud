@@ -21,8 +21,11 @@ module V1 = struct
           @param name Required. The resource name of the SecretVersion in the format [projects/*/secrets/*/versions/*].[projects/*/secrets/*/versions/latest] is an alias to the most recently created [SecretVersion].
        *)
 
-        let access_inner ~access_token (name : string) :
-            (response, [< Error.t ]) Lwt_result.t =
+        let access ~(name : string) =
+          let open Lwt_result.Syntax in
+          let* token_info =
+            Common.get_access_token ~scopes:[ Scopes.cloud_platform ] ()
+          in
           let open Lwt_result.Syntax in
           let* resp, body =
             Lwt.catch
@@ -35,7 +38,9 @@ module V1 = struct
                 let headers =
                   Cohttp.Header.of_list
                     [
-                      ("Authorization", Printf.sprintf "Bearer %s" access_token);
+                      ( "Authorization",
+                        Printf.sprintf "Bearer %s" token_info.token.access_token
+                      );
                     ]
                 in
                 Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok)
@@ -46,14 +51,6 @@ module V1 = struct
           | `OK -> Error.parse_body_json response_of_yojson body
           | status_code ->
               Error.of_response_status_code_and_body status_code body
-
-        let access ~(name : string) =
-          let open Lwt_result.Syntax in
-          let* token_info =
-            Auth.get_access_token ~scopes:[ Scopes.cloud_platform ] ()
-            |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
-          in
-          access_inner ~access_token:token_info.token.access_token name
       end
     end
   end

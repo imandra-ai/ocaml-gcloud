@@ -67,13 +67,8 @@ end
 module Datasets = struct
   let get ?project_id ~dataset_id () : (string, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
-    Auth.get_access_token ~scopes:[ Scopes.bigquery ] ()
-    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
-    >>= fun token_info ->
-    let project_id =
-      project_id |> CCOption.get_or ~default:token_info.project_id
-    in
-
+    Common.get_access_token ~scopes:[ Scopes.bigquery ] () >>= fun token_info ->
+    Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
     Lwt.catch
       (fun () ->
         let uri =
@@ -99,13 +94,8 @@ module Datasets = struct
 
   let list ?project_id () : (string, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
-    Auth.get_access_token ~scopes:[ Scopes.bigquery ] ()
-    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
-    >>= fun token_info ->
-    let project_id =
-      project_id |> CCOption.get_or ~default:token_info.project_id
-    in
-
+    Common.get_access_token ~scopes:[ Scopes.bigquery ] () >>= fun token_info ->
+    Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
     Lwt.catch
       (fun () ->
         let uri =
@@ -149,13 +139,9 @@ module Datasets = struct
     let list ?project_id ?max_results ?page_token ~dataset_id () :
         (resp, [> Error.t ]) Lwt_result.t =
       let open Lwt_result.Infix in
-      Auth.get_access_token ~scopes:[ Scopes.bigquery ] ()
-      |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
+      Common.get_access_token ~scopes:[ Scopes.bigquery ] ()
       >>= fun token_info ->
-      let project_id =
-        project_id |> CCOption.get_or ~default:token_info.project_id
-      in
-
+      Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
       Lwt.catch
         (fun () ->
           let uri =
@@ -710,13 +696,8 @@ module Jobs = struct
     in
 
     let open Lwt_result.Infix in
-    Auth.get_access_token ~scopes:[ Scopes.bigquery ] ()
-    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
-    >>= fun token_info ->
-    let project_id =
-      project_id |> CCOption.get_or ~default:token_info.project_id
-    in
-
+    Common.get_access_token ~scopes:[ Scopes.bigquery ] () >>= fun token_info ->
+    Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
     let use_gzip = use_gzip () in
 
     Lwt.catch

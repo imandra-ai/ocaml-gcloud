@@ -34,25 +34,6 @@ let copts_t =
     const (fun project_id log_levels -> copts ~project_id ~log_levels)
     $ project_id $ log_levels)
 
-let auth ~copts =
-  let open Lwt_result.Syntax in
-  let open Gcloud in
-  let* token_info =
-    Lwt.catch
-      (fun () ->
-        Auth.(get_access_token ~scopes:[ Scopes.cloud_platform ] ())
-        |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e))
-      (fun exn ->
-        Log.err (fun m -> m "got exn: %s" (Printexc.to_string exn));
-        let bt = Printexc.get_backtrace () in
-        Log.err (fun m -> m "%s" bt);
-        failwith "fatal")
-  in
-  let project_id =
-    CCOption.get_or ~default:token_info.project_id copts.project_id
-  in
-  Lwt_result.return (token_info.token.access_token, project_id)
-
 let print_result ~pp = function
   | Ok x -> Log.app (fun m -> m "%a" pp x)
   | Error e -> Log.err (fun m -> m "%a" Gcloud.Error.pp e)
@@ -61,11 +42,7 @@ let main ~copts ~pp f =
   Cli_logs.setup copts.log_levels;
   let lwt =
     let open Lwt.Syntax in
-    let* result =
-      let open Lwt_result.Syntax in
-      let* access_token, project_id = auth ~copts in
-      f ~access_token ~project_id ()
-    in
+    let* result = f () in
     let () = print_result ~pp result in
     Lwt.return ()
   in
@@ -76,13 +53,19 @@ module Secrets = struct
     module Access = struct
       let access ~copts ~secret version =
         let open Gcloud in
-        let f ~access_token ~project_id () =
+        let f () =
           let open Lwt_result.Syntax in
+          let* token_info =
+            Common.get_access_token ~scopes:[ Auth.Scopes.cloud_platform ] ()
+          in
+          let* project_id =
+            Common.get_project_id ?project_id:copts.project_id ~token_info ()
+          in
           let* s =
-            Secretmanager.V1.Projects.Secrets.Versions.access_inner
-              ~access_token
-              (Format.asprintf "projects/%s/secrets/%s/versions/%s" project_id
-                 secret version)
+            Secretmanager.V1.Projects.Secrets.Versions.access
+              ~name:
+                (Format.asprintf "projects/%s/secrets/%s/versions/%s" project_id
+                   secret version)
           in
           Lwt.return (Base64.decode s.payload.data)
         in

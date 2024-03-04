@@ -6,12 +6,12 @@ module V1 = struct
   module Locations = struct
     module KeyRings = struct
       module CryptoKeys = struct
-        let decrypt ~location ~key_ring ~crypto_key ciphertext :
+        let decrypt ?project_id ~location ~key_ring ~crypto_key ciphertext :
             (string, [> Error.t ]) Lwt_result.t =
           let open Lwt_result.Infix in
-          Auth.get_access_token ~scopes:[ Scopes.cloudkms ] ()
-          |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
+          Common.get_access_token ~scopes:[ Scopes.cloudkms ] ()
           >>= fun token_info ->
+          Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
           Lwt.catch
             (fun () ->
               let uri =
@@ -19,7 +19,7 @@ module V1 = struct
                   ~path:
                     (Printf.sprintf
                        "v1/projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s:decrypt"
-                       token_info.project_id location key_ring crypto_key)
+                       project_id location key_ring crypto_key)
               in
               let b64_encoded =
                 Base64.encode_exn ~alphabet:Base64.uri_safe_alphabet ciphertext

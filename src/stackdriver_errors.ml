@@ -57,19 +57,17 @@ type report_request = {
 
 [@@@warning "+39"]
 
-let report (report_request : report_request) : (unit, [> Error.t ]) Lwt_result.t
-    =
+let report ?project_id (report_request : report_request) :
+    (unit, [> Error.t ]) Lwt_result.t =
   let open Lwt_result.Infix in
-  Auth.get_access_token ~scopes:[ Scopes.stackdriver_integration ] ()
-  |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
+  Common.get_access_token ~scopes:[ Scopes.stackdriver_integration ] ()
   >>= fun token_info ->
+  Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
   Lwt.catch
     (fun () ->
       let uri =
         Uri.make () ~scheme:"https" ~host:"clouderrorreporting.googleapis.com"
-          ~path:
-            (Printf.sprintf "v1beta1/projects/%s/events:report"
-               token_info.project_id)
+          ~path:(Printf.sprintf "v1beta1/projects/%s/events:report" project_id)
       in
       let headers =
         Cohttp.Header.of_list

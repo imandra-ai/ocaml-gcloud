@@ -5,6 +5,8 @@ let src = Logs.Src.create "gcloud.auth"
 
 module L = (val Logs_lwt.src_log src)
 
+let ok = Lwt_result.ok
+
 module Environment_vars = struct
   let google_application_credentials = "GOOGLE_APPLICATION_CREDENTIALS"
 
@@ -22,6 +24,17 @@ module Paths = struct
     String.concat "/"
       [
         Sys.getenv "HOME"; ".config/gcloud/application_default_credentials.json";
+      ]
+
+  let active_config =
+    String.concat "/" [ Sys.getenv "HOME"; ".config/gcloud/active_config" ]
+
+  let config ~active_config_name =
+    String.concat "/"
+      [
+        Sys.getenv "HOME";
+        ".config/gcloud/configurations";
+        Format.asprintf "config_%s" active_config_name;
       ]
 end
 
@@ -89,19 +102,9 @@ module Compute_engine = struct
       Cohttp_lwt_unix.Client.get uri ~headers:metadata_headers
       >>= fun (resp, body) ->
       match Cohttp.Response.status resp with
-      | `OK -> Cohttp_lwt.Body.to_string body |> Lwt_result.ok
+      | `OK -> Cohttp_lwt.Body.to_string body |> ok
       | status -> `Bad_GCE_metadata_response status |> Lwt_result.fail
   end
-end
-
-module Cloud_sdk = struct
-  let get_project_id () =
-    Lwt_process.with_process_in
-      ("gcloud", [| "gcloud"; "config"; "get-value"; "core/project" |])
-      (fun process_in ->
-        let open Lwt.Infix in
-        process_in#status >>= fun _status ->
-        Lwt_io.read process_in#stdout >|= String.trim)
 end
 
 type error =
@@ -110,7 +113,6 @@ type error =
   | `Bad_credentials_priv_key of string
   | `Jwt_signing_error of string
   | `No_credentials
-  | `No_project_id
   | `Bad_subject_token_response of Cohttp.Response.t * string
   | Compute_engine.Metadata.error ]
 
@@ -130,9 +132,6 @@ let pp_error fmt (error : error) =
       Format.fprintf fmt
         "Unexpected response (%s) while fetching subject token: %s" status_str
         body_str
-  | `No_project_id ->
-      Format.fprintf fmt "Could not discover the project ID (try setting %s)"
-        Environment_vars.google_project_id
   | #Compute_engine.Metadata.error as e ->
       Compute_engine.Metadata.pp_error fmt e
 
@@ -251,11 +250,13 @@ module External_account_credentials = struct
         Lwt.return_error (`Bad_subject_token_response (resp, body_str))
 end
 
+type gce_metadata_details = { project_id : string }
+
 type credentials =
   | Authorized_user of user_refresh_credentials
   | Service_account of service_account_credentials
   | External_account of External_account_credentials.t
-  | GCE_metadata
+  | GCE_metadata of gce_metadata_details
 
 (* On Google Compute Engine, we don't need credentials *)
 
@@ -275,7 +276,6 @@ type token_info = {
   token : Access_token.t;
   created_at : float;
   scopes : string list;
-  project_id : string;
 }
 
 let token_info_mvar : token_info option Lwt_mvar.t = Lwt_mvar.create None
@@ -397,9 +397,7 @@ let access_token_of_credentials (scopes : string list)
           ("grant_type", [ "refresh_token" ]);
         ]
       in
-      let* res =
-        Cohttp_lwt_unix.Client.post_form token_uri ~params |> Lwt_result.ok
-      in
+      let* res = Cohttp_lwt_unix.Client.post_form token_uri ~params |> ok in
       access_token_of_response ~of_json:access_token_of_json res
   | Service_account c -> (
       let now = Unix.time () in
@@ -435,11 +433,11 @@ let access_token_of_credentials (scopes : string list)
           in
           let* res =
             Cohttp_lwt_unix.Client.post_form (Uri.of_string c.token_uri) ~params
-            |> Lwt_result.ok
+            |> ok
           in
           access_token_of_response ~of_json:access_token_of_json res
       | _ -> Lwt_result.fail (`Bad_credentials_priv_key "Not RSA key"))
-  | GCE_metadata ->
+  | GCE_metadata _ ->
       let uri =
         Printf.sprintf "%s/instance/service-accounts/default/token"
           Compute_engine.Metadata.metadata_root
@@ -448,7 +446,7 @@ let access_token_of_credentials (scopes : string list)
       let* res =
         Cohttp_lwt_unix.Client.get uri
           ~headers:Compute_engine.Metadata.metadata_headers
-        |> Lwt_result.ok
+        |> ok
       in
       access_token_of_response ~of_json:access_token_of_json res
   | External_account (c : External_account_credentials.t) -> (
@@ -461,22 +459,18 @@ let access_token_of_credentials (scopes : string list)
       *)
       let scopes = [ Scopes.iam ] @ scopes in
       let* res =
-        let* () =
-          L.debug (fun m -> m "Requesting subject token") |> Lwt_result.ok
-        in
+        let* () = L.debug (fun m -> m "Requesting subject token") |> ok in
         let* subject_token =
           let subject_token_uri = Uri.of_string c.credential_source.url in
           let* resp =
             Cohttp_lwt_unix.Client.get
               ~headers:(Cohttp.Header.of_list c.credential_source.headers)
               subject_token_uri
-            |> Lwt_result.ok
+            |> ok
           in
           External_account_credentials.subject_token_of_response c resp
         in
-        let* () =
-          L.debug (fun m -> m "Performing token exchange") |> Lwt_result.ok
-        in
+        let* () = L.debug (fun m -> m "Performing token exchange") |> ok in
         let token_uri = Uri.of_string c.token_url in
         let params =
           `Assoc
@@ -492,9 +486,7 @@ let access_token_of_credentials (scopes : string list)
             ]
         in
         let body = Cohttp_lwt.Body.of_string (Yojson.Basic.to_string params) in
-        let* res =
-          Cohttp_lwt_unix.Client.post token_uri ~body |> Lwt_result.ok
-        in
+        let* res = Cohttp_lwt_unix.Client.post token_uri ~body |> ok in
         Lwt_result.return res
       in
       match c.service_account_impersonation_url with
@@ -502,7 +494,7 @@ let access_token_of_credentials (scopes : string list)
       | Some sac ->
           let* () =
             L.debug (fun m -> m "attempting to impersonate service account")
-            |> Lwt_result.ok
+            |> ok
           in
           let* initial_access_token = access_token_of_response res in
           let headers =
@@ -521,12 +513,8 @@ let access_token_of_credentials (scopes : string list)
             Cohttp_lwt.Body.of_string (Yojson.Basic.to_string params)
           in
           let uri = Uri.of_string sac in
-          let* () =
-            L.debug (fun m -> m "POST %a" Uri.pp_hum uri) |> Lwt_result.ok
-          in
-          let* res =
-            Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok
-          in
+          let* () = L.debug (fun m -> m "POST %a" Uri.pp_hum uri) |> ok in
+          let* res = Cohttp_lwt_unix.Client.post uri ~headers ~body |> ok in
           let access_token_of_json (json : Yojson.Basic.t) :
               (Access_token.t, [> error ]) result =
             (* has a slightly different format from the access token in the other responses:
@@ -563,23 +551,12 @@ let access_token_of_credentials (scopes : string list)
           in
           access_token_of_response ~of_json:access_token_of_json res)
 
-let project_id_of_credentials (credentials : credentials) : string option =
-  match credentials with
-  | Service_account { project_id; _ } -> Some project_id
-  | Authorized_user _ | External_account _ | GCE_metadata -> None
-
-let discover_project_id (credentials : credentials) : string option =
-  CCOption.choice
-    [
-      Sys.getenv_opt Environment_vars.google_project_id;
-      project_id_of_credentials credentials;
-    ]
-
 let discover_credentials_with (discovery_mode : discovery_mode) =
-  let open Lwt.Infix in
-  L.debug (fun m ->
-      m "Attempting authentication using %a" pp_discovery_mode discovery_mode)
-  >>= fun () ->
+  let open Lwt.Syntax in
+  let* () =
+    L.debug (fun m ->
+        m "Attempting authentication using %a" pp_discovery_mode discovery_mode)
+  in
   match discovery_mode with
   | Discover_credentials_path_from_env -> (
       let credentials_file =
@@ -587,62 +564,35 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
       in
       match credentials_file with
       | None -> Lwt.return_error `No_credentials
-      | Some credentials_file ->
-          let open Lwt_result.Syntax in
-          let* credentials = credentials_of_file credentials_file in
-          let* () =
-            L.debug (fun m -> m "Trying to find project id:") |> Lwt_result.ok
-          in
-
-          let* project_id =
-            discover_project_id credentials
-            |> CCOption.to_result `No_project_id
-            |> Lwt.return
-          in
-          Lwt_result.return (credentials, project_id))
+      | Some credentials_file -> credentials_of_file credentials_file)
   | Discover_credentials_json_from_env -> (
       let credentials_json =
         Sys.getenv_opt Environment_vars.google_application_credentials_json
       in
       match credentials_json with
       | None -> Lwt.return_error `No_credentials
-      | Some json_str ->
-          let open Lwt_result.Infix in
-          credentials_of_string json_str |> Lwt.return >>= fun credentials ->
-          discover_project_id credentials
-          |> CCOption.to_result `No_project_id
-          |> Lwt.return
-          >>= fun project_id -> Lwt_result.return (credentials, project_id))
-  | Discover_credentials_from_cloud_sdk_path -> (
-      let open Lwt_result.Infix in
+      | Some json_str -> credentials_of_string json_str |> Lwt.return)
+  | Discover_credentials_from_cloud_sdk_path ->
       credentials_of_file Paths.application_default_credentials
-      >>= fun credentials ->
-      match discover_project_id credentials with
-      | Some project_id -> Lwt_result.return (credentials, project_id)
-      | None ->
-          Cloud_sdk.get_project_id () |> Lwt_result.ok >>= fun project_id ->
-          Lwt_result.return (credentials, project_id))
   | Discover_credentials_from_gce_metadata ->
       let ping =
         Lwt.catch
           (fun () ->
-            Compute_engine.Metadata.ping () >>= fun (resp, _body) ->
+            let open Lwt_result.Syntax in
+            let* resp, _body = Compute_engine.Metadata.ping () |> ok in
             match Cohttp.Response.status resp with
             | `OK when Compute_engine.Metadata.response_has_metadata_header resp
               ->
-                let open Lwt_result.Infix in
-                let credentials = GCE_metadata in
-                let project_id = discover_project_id credentials in
-                (match project_id with
-                | Some project_id -> Lwt_result.return project_id
-                | None -> Compute_engine.Metadata.get_project_id ())
-                >>= fun project_id -> Lwt.return_ok (credentials, project_id)
+                let* project_id = Compute_engine.Metadata.get_project_id () in
+                Lwt_result.return (GCE_metadata { project_id })
             | _ -> Lwt.return_error `No_credentials)
           (fun _exn -> Lwt.return_error `No_credentials)
       in
       let timeout =
-        Lwt_unix.sleep Compute_engine.Metadata.metadata_default_timeout
-        >>= fun () -> Lwt.return_error `No_credentials
+        let* () =
+          Lwt_unix.sleep Compute_engine.Metadata.metadata_default_timeout
+        in
+        Lwt.return_error `No_credentials
       in
       Lwt.pick [ ping; timeout ]
 
@@ -656,7 +606,7 @@ let rec first_ok ~(error : 'e) (fs : (unit -> ('a, 'e) result Lwt.t) list) :
       | Ok x -> Lwt.return_ok x
       | Error error -> first_ok ~error fs)
 
-let discover_credentials () : (credentials * string, [> error ]) Lwt_result.t =
+let discover_credentials () : (credentials, [> error ]) Lwt_result.t =
   [
     Discover_credentials_path_from_env;
     Discover_credentials_json_from_env;
@@ -690,23 +640,14 @@ let get_access_token ?(scopes : string list = []) () :
     (token_info, [> error ]) Lwt_result.t =
   let get_new_access_token scopes =
     let open Lwt_result.Syntax in
-    let* credentials, project_id = discover_credentials () in
+    let* credentials = discover_credentials () in
     let* access_token = access_token_of_credentials scopes credentials in
-    let+ () =
-      L.info (fun m -> m "Authenticated OK (project: %s)" project_id)
-      |> Lwt_result.ok
-    in
+    let+ () = L.info (fun m -> m "Authenticated OK!") |> ok in
     let scopes =
       CCList.union ~eq:String.equal scopes
         access_token.additional_refresh_scopes
     in
-    {
-      credentials;
-      token = access_token;
-      created_at = Unix.time ();
-      scopes;
-      project_id;
-    }
+    { credentials; token = access_token; created_at = Unix.time (); scopes }
   in
   let has_requested_scopes token_info =
     CCList.subset ~eq:String.equal scopes token_info.scopes
@@ -736,8 +677,3 @@ let get_access_token ?(scopes : string list = []) () :
   in
   let* () = Lwt_mvar.put token_info_mvar (CCResult.to_opt token_info_result) in
   Lwt.return token_info_result
-
-let get_project_id (scopes : string list) =
-  let open Lwt_result.Infix in
-  get_access_token ~scopes () >>= fun token_info ->
-  Lwt.return_ok token_info.project_id

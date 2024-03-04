@@ -7,6 +7,7 @@ module V1 : sig
     module KeyRings : sig
       module CryptoKeys : sig
         val decrypt :
+          ?project_id:string ->
           location:string ->
           key_ring:string ->
           crypto_key:string ->
