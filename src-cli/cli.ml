@@ -44,7 +44,7 @@ let main ~copts ~pp f =
       match result with
       | Ok x -> Log_lwt.app (fun m -> m "%a" pp x)
       | Error e ->
-          let* () = Log_lwt.app (fun m -> m "Error: %a" Gcloud.Error.pp e) in
+          let* () = Log_lwt.err (fun m -> m "%a" Gcloud.Error.pp e) in
           exit 1
     in
     Lwt.return result
