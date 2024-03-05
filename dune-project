@@ -42,6 +42,7 @@
  (description "For when the official gcloud distribution is too heavyweight.")
  (depends
    gcloud
+   (cohttp (< 6))
    cmdliner
    logs
    tls-lwt))

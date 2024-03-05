@@ -9,6 +9,7 @@ bug-reports: "https://github.com/imandra-ai/ocaml-gcloud/issues"
 depends: [
   "dune" {>= "3.8"}
   "gcloud"
+  "cohttp" {< "6"}
   "cmdliner"
   "logs"
   "tls-lwt"
