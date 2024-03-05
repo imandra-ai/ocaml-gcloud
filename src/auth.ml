@@ -580,13 +580,35 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
           (fun () ->
             let open Lwt_result.Syntax in
             let* resp, _body = Compute_engine.Metadata.ping () |> ok in
+            let* () = L.debug (fun m -> m "Got metadata response") |> ok in
+            let has_metadata_header =
+              Compute_engine.Metadata.response_has_metadata_header resp
+            in
             match Cohttp.Response.status resp with
-            | `OK when Compute_engine.Metadata.response_has_metadata_header resp
-              ->
+            | `OK when has_metadata_header ->
+                let* () =
+                  L.debug (fun m -> m "Metadata response was ok with header")
+                  |> ok
+                in
                 let* project_id = Compute_engine.Metadata.get_project_id () in
                 Lwt_result.return (GCE_metadata { project_id })
-            | _ -> Lwt.return_error `No_credentials)
-          (fun _exn -> Lwt.return_error `No_credentials)
+            | code ->
+                let* () =
+                  L.debug (fun m ->
+                      m "Metadata response was: (%d, header: %b)"
+                        (Cohttp.Code.code_of_status code)
+                        has_metadata_header)
+                  |> ok
+                in
+
+                Lwt.return_error `No_credentials)
+          (fun exn ->
+            let* () =
+              L.debug (fun m ->
+                  let s = Printexc.to_string exn in
+                  m "Exception while pinging metadata endpoint: %s" s)
+            in
+            Lwt.return_error `No_credentials)
       in
       let timeout =
         let* () =
