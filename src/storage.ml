@@ -84,6 +84,47 @@ let insert_object_stream bucket_name name (data : string Lwt_stream.t) :
   let body = Cohttp_lwt.Body.of_stream data in
   insert_object_ bucket_name name body
 
+type rewrite_object_response = {
+  kind : string;
+  total_bytes_rewritten : string; [@key "totalBytesRewritten"]
+  object_size : string; [@key "objectSize"]
+  done_ : bool;
+  rewrite_token : string option; [@key "rewriteToken"] [@default None]
+  resource : Yojson.Safe.t option; [@default None]
+}
+[@@deriving yojson]
+
+(** NOTE: Multiple request rewrites not currently implemented.
+    https://cloud.google.com/storage/docs/json_api/v1/objects/rewrite
+ *)
+let rewrite_object source_bucket source_object destination_bucket
+    destination_object : (rewrite_object_response, [> Error.t ]) Lwt_result.t =
+  let open Lwt_result.Infix in
+  Common.get_access_token ~scopes:[ Scopes.devstorage_read_write ] ()
+  >>= fun token_info ->
+  Lwt.catch
+    (fun () ->
+      let uri =
+        Uri.make () ~scheme:"https" ~host:"storage.googleapis.com"
+          ~path:
+            (Printf.sprintf "storage/v1/b/%s/o/%s/rewriteTo/b/%s/o/%s"
+               source_bucket source_object destination_bucket destination_object)
+      in
+      let headers =
+        Cohttp.Header.of_list
+          [
+            ( "Authorization",
+              Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
+          ]
+      in
+      let body = Cohttp_lwt.Body.empty in
+      Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok)
+    (fun e -> Lwt_result.fail (`Network_error e))
+  >>= fun (resp, body) ->
+  match Cohttp.Response.status resp with
+  | `OK -> Error.parse_body_json rewrite_object_response_of_yojson body
+  | status_code -> Error.of_response_status_code_and_body status_code body
+
 [@@@warning "-39"]
 
 type list_objects_response = {
