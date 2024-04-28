@@ -28,5 +28,11 @@ jobs:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
     - run: opam install . --deps-only --with-test
     - run: opam exec -- dune build
-    - run: opam install ocamlformat=0.22.4
-    - run: opam exec -- dune build @fmt
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - uses: cachix/install-nix-action@v26
+    - run: nix-shell -I nixpkgs=channel:nixos-23.05 --pure -p ocamlformat_0_22_4 dune_3 ocaml --run "dune build @fmt"
