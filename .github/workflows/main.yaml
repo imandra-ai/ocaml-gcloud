@@ -1,0 +1,32 @@
+name: "main"
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+
+permissions:
+  id-token: write
+  contents: read
+  statuses: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        ocaml-compiler:
+          - "5.1"
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Set up OCaml ${{ matrix.ocaml-compiler }}
+      uses: ocaml/setup-ocaml@v2
+      with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+    - run: opam install . --deps-only --with-test
+    - run: opam exec -- dune build
+    - run: opam install ocamlformat=0.22.4
+    - run: opam exec -- dune build @fmt
