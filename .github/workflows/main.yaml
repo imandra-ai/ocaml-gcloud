@@ -1,0 +1,38 @@
+name: "main"
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+
+permissions:
+  id-token: write
+  contents: read
+  statuses: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        ocaml-compiler:
+          - "5.1"
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Set up OCaml ${{ matrix.ocaml-compiler }}
+      uses: ocaml/setup-ocaml@v2
+      with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+    - run: opam install . --deps-only --with-test
+    - run: opam exec -- dune build
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - uses: cachix/install-nix-action@v26
+    - run: nix-shell -I nixpkgs=channel:nixos-23.05 --pure -p ocamlformat_0_22_4 dune_3 ocaml --run "dune build @fmt"
