@@ -1,6 +1,7 @@
 (lang dune 3.8)
 (using melange 0.1)
 
+(name gcloud)
 (source (github imandra-ai/ocaml-gcloud))
 (authors "Matt Bray <matt@imandra.ai>" "Dave Aitken <dave@imandra.ai>")
 (maintainers "Imandra <tech@imandra.ai>")
