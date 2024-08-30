@@ -1,3 +1,5 @@
+let ok = Lwt_result.ok
+
 module Scopes = struct
   let cloud_platform = "https://www.googleapis.com/auth/cloud-platform"
   let compute = "https://www.googleapis.com/auth/cloud-platform"
@@ -48,13 +50,14 @@ module FirewallRules = struct
             ]
         in
         let body_str = rule |> rule_to_yojson |> Yojson.Safe.to_string in
-        print_endline body_str;
         let body = body_str |> Cohttp_lwt.Body.of_string in
-        Cohttp_lwt_unix.Client.post uri ~body ~headers |> Lwt_result.ok)
+        let open Lwt.Infix in
+        Cohttp_lwt_unix.Client.post uri ~body ~headers
+        >>= Util.consume_body |> ok)
       (fun e -> Lwt_result.fail (`Network_error e))
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
-    | `OK -> Lwt_result.ok (Cohttp_lwt.Body.to_string body)
+    | `OK -> Lwt_result.return body
     | status_code -> Error.of_response_status_code_and_body status_code body
 
   let delete ?project_id ~(name : string) () :
@@ -78,10 +81,11 @@ module FirewallRules = struct
                 Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
             ]
         in
-        Cohttp_lwt_unix.Client.delete uri ~headers |> Lwt_result.ok)
+        let open Lwt.Infix in
+        Cohttp_lwt_unix.Client.delete uri ~headers >>= Util.consume_body |> ok)
       (fun e -> Lwt_result.fail (`Network_error e))
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
-    | `OK -> Lwt_result.ok (Cohttp_lwt.Body.to_string body)
+    | `OK -> Lwt_result.return body
     | status_code -> Error.of_response_status_code_and_body status_code body
 end

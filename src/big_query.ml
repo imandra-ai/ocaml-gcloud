@@ -2,6 +2,8 @@ let src = Logs.Src.create "gcloud.bigquery"
 
 module L = (val Logs_lwt.src_log src)
 
+let ok = Lwt_result.ok
+
 module Scopes = struct
   let bigquery = "https://www.googleapis.com/auth/bigquery"
 end
@@ -85,11 +87,13 @@ module Datasets = struct
             ]
         in
         L.debug (fun m -> m "GET %a" Uri.pp_hum uri) |> Lwt_result.ok
-        >>= fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok)
+        >>= fun () ->
+        let open Lwt.Infix in
+        Cohttp_lwt_unix.Client.get uri ~headers >>= Util.consume_body |> ok)
       (fun e -> `Network_error e |> Lwt_result.fail)
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
-    | `OK -> Cohttp_lwt.Body.to_string body |> Lwt_result.ok
+    | `OK -> Lwt_result.return body
     | x -> Error.of_response_status_code_and_body x body
 
   let list ?project_id () : (string, [> Error.t ]) Lwt_result.t =
@@ -110,11 +114,13 @@ module Datasets = struct
             ]
         in
         L.debug (fun m -> m "GET %a" Uri.pp_hum uri) |> Lwt_result.ok
-        >>= fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok)
+        >>= fun () ->
+        let open Lwt.Infix in
+        Cohttp_lwt_unix.Client.get uri ~headers >>= Util.consume_body |> ok)
       (fun e -> `Network_error e |> Lwt_result.fail)
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
-    | `OK -> Cohttp_lwt.Body.to_string body |> Lwt_result.ok
+    | `OK -> Lwt_result.return body
     | x -> Error.of_response_status_code_and_body x body
 
   module Tables = struct
@@ -173,11 +179,13 @@ module Datasets = struct
               ]
           in
           L.debug (fun m -> m "GET %a" Uri.pp_hum uri) |> Lwt_result.ok
-          >>= fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok)
+          >>= fun () ->
+          let open Lwt.Infix in
+          Cohttp_lwt_unix.Client.get uri ~headers >>= Util.consume_body |> ok)
         (fun e -> `Network_error e |> Lwt_result.fail)
       >>= fun (resp, body) ->
       match Cohttp.Response.status resp with
-      | `OK -> Error.parse_body_json resp_of_yojson body
+      | `OK -> Error.parse_body_json resp_of_yojson body |> Lwt.return
       | x -> Error.of_response_status_code_and_body x body
   end
 end
@@ -730,12 +738,15 @@ module Jobs = struct
             m "Query: %s" q_trimmed)
         |> Lwt_result.ok
         >>= fun () ->
-        Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok)
+        let open Lwt.Infix in
+        Cohttp_lwt_unix.Client.post uri ~headers ~body
+        >>= Util.consume_body |> ok)
       (fun e -> `Network_error e |> Lwt_result.fail)
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
     | `OK ->
         Error.parse_body_json ~gzipped:use_gzip query_response_of_yojson body
+        |> Lwt.return
         >>= fun response ->
         L.debug (fun m -> m "%a" pp_query_response response) |> Lwt_result.ok
         >>= fun () -> Lwt_result.return response
@@ -786,12 +797,15 @@ module Jobs = struct
       |> add_gzip_headers ~use_gzip
     in
     Lwt.catch
-      (fun () -> Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok)
+      (fun () ->
+        let open Lwt.Infix in
+        Cohttp_lwt_unix.Client.get uri ~headers >>= Util.consume_body |> ok)
       (fun e -> Lwt_result.fail (`Network_error e))
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
     | `OK ->
         Error.parse_body_json ~gzipped:use_gzip query_response_of_yojson body
+        |> Lwt.return
         >>= fun response ->
         L.debug (fun m -> m "%a" pp_query_response response) |> Lwt_result.ok
         >>= fun () -> Lwt_result.return response

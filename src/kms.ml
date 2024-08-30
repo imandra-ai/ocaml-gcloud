@@ -1,3 +1,5 @@
+let ok = Lwt_result.ok
+
 module Scopes = struct
   let cloudkms = "https://www.googleapis.com/auth/cloudkms"
 end
@@ -36,7 +38,9 @@ module V1 = struct
                         token_info.Auth.token.access_token );
                   ]
               in
-              Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok)
+              let open Lwt.Infix in
+              Cohttp_lwt_unix.Client.post uri ~headers ~body
+              >>= Util.consume_body |> ok)
             (fun e -> `Network_error e |> Lwt_result.fail)
           >>= fun (resp, body) ->
           match Cohttp.Response.status resp with
@@ -52,6 +56,7 @@ module V1 = struct
                         Error "Could not base64-decode the plaintext")
                   | _ -> Error "Expected an object with field 'plaintext'")
                 body
+              |> Lwt.return
           | x -> Error.of_response_status_code_and_body x body
       end
     end

@@ -1,3 +1,5 @@
+let ok = Lwt_result.ok
+
 module Scopes = struct
   let pubsub = "https://www.googleapis.com/auth/pubsub"
 end
@@ -36,7 +38,9 @@ module Subscriptions = struct
         in
         Logs_lwt.debug (fun m -> m "POST %a" Uri.pp_hum uri) |> Lwt_result.ok
         >>= fun () ->
-        Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok)
+        let open Lwt.Infix in
+        Cohttp_lwt_unix.Client.post uri ~headers ~body
+        >>= Util.consume_body |> ok)
       (fun e -> `Network_error e |> Lwt_result.fail)
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
@@ -94,12 +98,14 @@ module Subscriptions = struct
         Logs_lwt.debug ~src:log_src_pull (fun m -> m "POST %a" Uri.pp_hum uri)
         |> Lwt_result.ok
         >>= fun () ->
-        Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok)
+        let open Lwt.Infix in
+        Cohttp_lwt_unix.Client.post uri ~headers ~body
+        >>= Util.consume_body |> ok)
       (fun e -> `Network_error e |> Lwt_result.fail)
     >>= fun (resp, body) ->
     match Cohttp.Response.status resp with
     | `OK ->
-        Error.parse_body_json received_messages_of_yojson body
+        Error.parse_body_json received_messages_of_yojson body |> Lwt.return
         >|= fun { received_messages } ->
         let received_messages =
           received_messages
