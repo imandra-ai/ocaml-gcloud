@@ -56,10 +56,8 @@ let pp fmt (error : t) =
   | `Msg s -> Format.fprintf fmt "Msg: %s" s
 
 let parse_body_json ?(gzipped = false)
-    (transform : Yojson.Safe.t -> ('a, string) result)
-    (body : Cohttp_lwt.Body.t) : ('a, [> t ]) Lwt_result.t =
-  let open Lwt.Infix in
-  Cohttp_lwt.Body.to_string body >>= fun body_str ->
+    (transform : Yojson.Safe.t -> ('a, string) result) (body_str : string) :
+    ('a, [> t ]) result =
   let body =
     if gzipped then
       Ezgzip.decompress body_str
@@ -72,18 +70,15 @@ let parse_body_json ?(gzipped = false)
     | Yojson.Json_error msg -> Error (`Json_parse_error (msg, body_str))
     | e -> Error (`Json_parse_error (Printexc.to_string e, body_str))
   in
-
   parse_result
   |> CCResult.flat_map (fun json ->
          transform json
          |> CCResult.map_err (fun e -> `Json_transform_error (e, json)))
-  |> Lwt.return
 
 let of_response_status_code_and_body ?gzipped
-    (status_code : Cohttp.Code.status_code) (body : Cohttp_lwt.Body.t) :
+    (status_code : Cohttp.Code.status_code) (body_str : string) :
     ('a, [> t ]) Lwt_result.t =
-  let open Lwt.Infix in
-  parse_body_json ?gzipped api_json_error_of_yojson body >>= function
+  match parse_body_json ?gzipped api_json_error_of_yojson body_str with
   | Ok parsed_error ->
       Lwt_result.fail (`Gcloud_api_error (status_code, Json parsed_error))
   | Error (`Json_parse_error (_, body_str)) ->

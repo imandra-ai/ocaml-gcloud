@@ -1,3 +1,5 @@
+let ok = Lwt_result.ok
+
 module Scopes = struct
   let stackdriver_integration =
     "https://www.googleapis.com/auth/stackdriver-integration"
@@ -80,7 +82,8 @@ let report ?project_id (report_request : report_request) :
         report_request |> report_request_to_yojson |> Yojson.Safe.to_string
       in
       let body = body_str |> Cohttp_lwt.Body.of_string in
-      Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok
+      (let open Lwt.Infix in
+      Cohttp_lwt_unix.Client.post uri ~headers ~body >>= Util.consume_body |> ok)
       >>= fun (response, body) ->
       let status = Cohttp.Response.status response in
       match status with

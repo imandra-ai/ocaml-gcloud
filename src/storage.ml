@@ -1,3 +1,5 @@
+let ok = Lwt_result.ok
+
 module Scopes = struct
   let devstorage_read_only =
     "https://www.googleapis.com/auth/devstorage.read_only"
@@ -40,7 +42,10 @@ let get_object_stream (bucket_name : string) (object_path : string) :
   >>= fun (resp, body) ->
   match Cohttp.Response.status resp with
   | `OK -> Cohttp_lwt.Body.to_stream body |> Lwt_result.return
-  | status_code -> Error.of_response_status_code_and_body status_code body
+  | status_code ->
+      Cohttp_lwt.Body.to_string body
+      |> ok
+      >>= Error.of_response_status_code_and_body status_code
 
 let get_object (bucket_name : string) (object_path : string) :
     (string, [> Error.t ]) Lwt_result.t =
@@ -67,11 +72,12 @@ let insert_object_ bucket_name name (body : Cohttp_lwt.Body.t) :
               Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
           ]
       in
-      Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok)
+      let open Lwt.Infix in
+      Cohttp_lwt_unix.Client.post uri ~headers ~body >>= Util.consume_body |> ok)
     (fun e -> Lwt_result.fail (`Network_error e))
   >>= fun (resp, body) ->
   match Cohttp.Response.status resp with
-  | `OK -> Error.parse_body_json object__of_yojson body
+  | `OK -> Error.parse_body_json object__of_yojson body |> Lwt.return
   | status_code -> Error.of_response_status_code_and_body status_code body
 
 let insert_object bucket_name name (data : string) :
@@ -118,11 +124,13 @@ let rewrite_object source_bucket source_object destination_bucket
           ]
       in
       let body = Cohttp_lwt.Body.empty in
-      Cohttp_lwt_unix.Client.post uri ~headers ~body |> Lwt_result.ok)
+      let open Lwt.Infix in
+      Cohttp_lwt_unix.Client.post uri ~headers ~body >>= Util.consume_body |> ok)
     (fun e -> Lwt_result.fail (`Network_error e))
   >>= fun (resp, body) ->
   match Cohttp.Response.status resp with
-  | `OK -> Error.parse_body_json rewrite_object_response_of_yojson body
+  | `OK ->
+      Error.parse_body_json rewrite_object_response_of_yojson body |> Lwt.return
   | status_code -> Error.of_response_status_code_and_body status_code body
 
 [@@@warning "-39"]
@@ -168,9 +176,11 @@ let list_objects ?(delimiter : string option) ?(prefix : string option)
               Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
           ]
       in
-      Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok)
+      let open Lwt.Infix in
+      Cohttp_lwt_unix.Client.get uri ~headers >>= Util.consume_body |> ok)
     (fun e -> Lwt_result.fail (`Network_error e))
   >>= fun (resp, body) ->
   match Cohttp.Response.status resp with
-  | `OK -> Error.parse_body_json list_objects_response_of_yojson body
+  | `OK ->
+      Error.parse_body_json list_objects_response_of_yojson body |> Lwt.return
   | status_code -> Error.of_response_status_code_and_body status_code body

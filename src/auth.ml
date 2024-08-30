@@ -89,7 +89,9 @@ module Compute_engine = struct
 
     let ping () =
       let uri = Uri.of_string metadata_ip_root in
+      let open Lwt.Infix in
       Cohttp_lwt_unix.Client.get uri ~headers:metadata_headers
+      >>= Util.drain_body
 
     let get_project_id () :
         ( string,
@@ -100,9 +102,10 @@ module Compute_engine = struct
         Uri.of_string (Printf.sprintf "%s/project/project-id" metadata_root)
       in
       Cohttp_lwt_unix.Client.get uri ~headers:metadata_headers
+      >>= Util.consume_body
       >>= fun (resp, body) ->
       match Cohttp.Response.status resp with
-      | `OK -> Cohttp_lwt.Body.to_string body |> ok
+      | `OK -> Lwt_result.return body
       | status -> `Bad_GCE_metadata_response status |> Lwt_result.fail
   end
 end
@@ -230,14 +233,13 @@ module External_account_credentials = struct
     |> to_string
 
   let subject_token_of_response (t : t)
-      ((resp, body) : Cohttp.Response.t * Cohttp_lwt.Body.t) :
+      ((resp, body_str) : Cohttp.Response.t * string) :
       (string, [> `Bad_token_response of string ]) result Lwt.t =
     let open Lwt.Syntax in
     match Cohttp.Response.status resp with
     | `OK -> (
         match t.credential_source.format.type_ with
         | `Json -> (
-            let* body_str = Cohttp_lwt.Body.to_string body in
             try
               body_str |> Yojson.Basic.from_string |> subject_token_of_json t
               |> Lwt.return_ok
@@ -245,7 +247,6 @@ module External_account_credentials = struct
               let* () = L.debug (fun m -> m "Type_error: %s" msg) in
               Lwt.return_error (`Bad_subject_token_response (resp, body_str))))
     | _ ->
-        let* body_str = Cohttp_lwt.Body.to_string body in
         let* () = L.err (fun m -> m "response: %s" body_str) in
         Lwt.return_error (`Bad_subject_token_response (resp, body_str))
 end
@@ -367,15 +368,12 @@ let credentials_of_file (credentials_file : string) :
         lines |> String.concat "\n" |> credentials_of_string |> Lwt.return)
 
 let access_token_of_response ?(of_json = access_token_of_json)
-    ((resp, body) : Cohttp.Response.t * Cohttp_lwt.Body.t) :
+    ((resp, body_str) : Cohttp.Response.t * string) :
     (Access_token.t, [> `Bad_token_response of string ]) result Lwt.t =
   let open Lwt.Syntax in
   match Cohttp.Response.status resp with
-  | `OK ->
-      let* body_str = Cohttp_lwt.Body.to_string body in
-      body_str |> Yojson.Basic.from_string |> of_json |> Lwt.return
+  | `OK -> body_str |> Yojson.Basic.from_string |> of_json |> Lwt.return
   | _ ->
-      let* body_str = Cohttp_lwt.Body.to_string body in
       let* () = L.err (fun m -> m "response: %s" body_str) in
       Lwt.return_error (`Bad_token_response body_str)
 
@@ -397,7 +395,11 @@ let access_token_of_credentials (scopes : string list)
           ("grant_type", [ "refresh_token" ]);
         ]
       in
-      let* res = Cohttp_lwt_unix.Client.post_form token_uri ~params |> ok in
+      let* res =
+        let open Lwt.Infix in
+        Cohttp_lwt_unix.Client.post_form token_uri ~params
+        >>= Util.consume_body |> ok
+      in
       access_token_of_response ~of_json:access_token_of_json res
   | Service_account c -> (
       let now = Unix.time () in
@@ -432,8 +434,9 @@ let access_token_of_credentials (scopes : string list)
             ]
           in
           let* res =
+            let open Lwt.Infix in
             Cohttp_lwt_unix.Client.post_form (Uri.of_string c.token_uri) ~params
-            |> ok
+            >>= Util.consume_body |> ok
           in
           access_token_of_response ~of_json:access_token_of_json res
       | _ -> Lwt_result.fail (`Bad_credentials_priv_key "Not RSA key"))
@@ -444,9 +447,10 @@ let access_token_of_credentials (scopes : string list)
         |> Uri.of_string
       in
       let* res =
+        let open Lwt.Infix in
         Cohttp_lwt_unix.Client.get uri
           ~headers:Compute_engine.Metadata.metadata_headers
-        |> ok
+        >>= Util.consume_body |> ok
       in
       access_token_of_response ~of_json:access_token_of_json res
   | External_account (c : External_account_credentials.t) -> (
@@ -463,10 +467,11 @@ let access_token_of_credentials (scopes : string list)
         let* subject_token =
           let subject_token_uri = Uri.of_string c.credential_source.url in
           let* resp =
+            let open Lwt.Infix in
             Cohttp_lwt_unix.Client.get
               ~headers:(Cohttp.Header.of_list c.credential_source.headers)
               subject_token_uri
-            |> ok
+            >>= Util.consume_body |> ok
           in
           External_account_credentials.subject_token_of_response c resp
         in
@@ -486,7 +491,11 @@ let access_token_of_credentials (scopes : string list)
             ]
         in
         let body = Cohttp_lwt.Body.of_string (Yojson.Basic.to_string params) in
-        let* res = Cohttp_lwt_unix.Client.post token_uri ~body |> ok in
+        let* res =
+          let open Lwt.Infix in
+          Cohttp_lwt_unix.Client.post token_uri ~body
+          >>= Util.consume_body |> ok
+        in
         Lwt_result.return res
       in
       match c.service_account_impersonation_url with
@@ -514,7 +523,11 @@ let access_token_of_credentials (scopes : string list)
           in
           let uri = Uri.of_string sac in
           let* () = L.debug (fun m -> m "POST %a" Uri.pp_hum uri) |> ok in
-          let* res = Cohttp_lwt_unix.Client.post uri ~headers ~body |> ok in
+          let* res =
+            let open Lwt.Infix in
+            Cohttp_lwt_unix.Client.post uri ~headers ~body
+            >>= Util.consume_body |> ok
+          in
           let access_token_of_json (json : Yojson.Basic.t) :
               (Access_token.t, [> error ]) result =
             (* has a slightly different format from the access token in the other responses:
@@ -579,7 +592,7 @@ let discover_credentials_with (discovery_mode : discovery_mode) =
         Lwt.catch
           (fun () ->
             let open Lwt_result.Syntax in
-            let* resp, _body = Compute_engine.Metadata.ping () |> ok in
+            let* resp = Compute_engine.Metadata.ping () |> ok in
             let* () = L.debug (fun m -> m "Got metadata response") |> ok in
             let has_metadata_header =
               Compute_engine.Metadata.response_has_metadata_header resp

@@ -1,3 +1,5 @@
+let ok = Lwt_result.ok
+
 module Scopes = struct
   let cloud_platform = "https://www.googleapis.com/auth/cloud-platform"
 end
@@ -54,11 +56,12 @@ module Projects = struct
                       token_info.Auth.token.access_token );
                 ]
             in
-            Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok)
+            let open Lwt.Infix in
+            Cohttp_lwt_unix.Client.get uri ~headers >>= Util.consume_body |> ok)
           (fun e -> Lwt_result.fail (`Network_error e))
         >>= fun (resp, body) ->
         match Cohttp.Response.status resp with
-        | `OK -> Error.parse_body_json of_yojson body
+        | `OK -> Error.parse_body_json of_yojson body |> Lwt.return
         | status_code -> Error.of_response_status_code_and_body status_code body
     end
   end
