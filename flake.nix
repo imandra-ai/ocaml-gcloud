@@ -2,9 +2,6 @@
   inputs = {
     nixpkgs.url = "nixpkgs/nixpkgs-unstable";
 
-    #ocamlformat 0.22.4 is a bit old, so is only in older versions of nixpkgs
-    nixpkgs2305.url = "nixpkgs/nixos-23.05";
-
     flake-utils.url = "github:numtide/flake-utils";
     opam-nix = {
       url = "github:tweag/opam-nix";
@@ -16,12 +13,10 @@
     };
   };
 
-  outputs = { self, nixpkgs, nixpkgs2305, flake-utils, opam-nix, opam-repository
-    }@inputs:
+  outputs = { self, nixpkgs, flake-utils, opam-nix, opam-repository }@inputs:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        pkgs2305 = nixpkgs2305.legacyPackages.${system};
         fs = pkgs.lib.fileset;
         on = opam-nix.lib.${system};
         ocaml-version = "5.1.0";
@@ -106,9 +101,7 @@
           buildInputs = (map (p: opamScope.${p}) opamFilePackageNames) ++ [
             devOpamScope.utop
             devOpamScope.ocaml-lsp-server
-
-            #ocamlformat 0.22.4 is a bit old, so is only in older versions of nixpkgs
-            pkgs2305.ocamlformat_0_22_4
+            pkgs.ocamlformat_0_22_4
           ];
         };
       });
