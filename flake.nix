@@ -1,8 +1,8 @@
 {
   inputs = {
     nixpkgs.url = "nixpkgs/nixpkgs-unstable";
-
     flake-utils.url = "github:numtide/flake-utils";
+
     opam-nix = {
       url = "github:tweag/opam-nix";
       inputs.opam-repository.follows = "opam-repository";
@@ -19,7 +19,7 @@
         pkgs = nixpkgs.legacyPackages.${system};
         fs = pkgs.lib.fileset;
         on = opam-nix.lib.${system};
-        ocaml-version = "5.1.0";
+        ocaml-version = "5.1.1";
         ocaml-base-compiler = ocaml-version;
 
         # List of opam files you which to be read by opam-nix
@@ -61,13 +61,6 @@
           fileset = fs.unions opamFiles;
         }) { inherit ocaml-base-compiler; });
 
-        # build any dev deps on the correct ocaml version, without conflicting with project deps.
-        devOpamScope = (on.queryToScope { repos = [ opam-repository ]; } {
-          inherit ocaml-base-compiler;
-          ocaml-lsp-server = "*";
-          utop = "*";
-        });
-
         gcloud-cli = pkgs.stdenv.mkDerivation {
           pname = "gcloud-cli";
           version = "1.0.0";
@@ -98,9 +91,10 @@
         packages.gcloud-cli = gcloud-cli;
 
         packages.default = pkgs.mkShell {
+          dontDetectOcamlConflicts = true;
           buildInputs = (map (p: opamScope.${p}) opamFilePackageNames) ++ [
-            devOpamScope.utop
-            devOpamScope.ocaml-lsp-server
+            pkgs.ocaml-ng.ocamlPackages_5_1.utop
+            pkgs.ocaml-ng.ocamlPackages_5_1.ocaml-lsp
             pkgs.ocamlformat_0_22_4
           ];
         };
