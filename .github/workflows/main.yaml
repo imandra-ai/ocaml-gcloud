@@ -35,4 +35,4 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
     - uses: cachix/install-nix-action@v26
-    - run: nix-shell -I nixpkgs=channel:nixos-23.05 --pure -p ocamlformat_0_22_4 dune_3 ocaml --run "dune build @fmt"
+    - run: nix-shell -I nixpkgs=channel:nixpkgs-unstable --pure -p ocamlformat_0_22_4 dune_3 ocaml --run "dune build @fmt"
