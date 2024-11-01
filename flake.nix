@@ -12,14 +12,15 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         onix' = onix.packages.${system}.latest;
+        opamFiles = [ ./gcloud.opam ./gcloud-cli.opam ];
         onixEnv = onix'.env {
           path = ./.;
-          # roots = [./gcloud.opam ./gcloud-cli.opam];
+          roots = opamFiles;
           lock = ./onix-lock.json;
         };
         onixEnvDev = onix'.env {
           path = ./.;
-          # roots = [./gcloud.opam ./gcloud-cli.opam];
+          roots = opamFiles ++ [ ./gcloud-melange.opam ];
           lock = ./onix-lock-dev.json;
         };
 
