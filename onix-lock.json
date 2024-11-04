@@ -3,7 +3,7 @@
    "repositories": [
      {
        "url": "https://github.com/ocaml/opam-repository.git",
-       "rev": "ce4637ae20e511e8dc54562b123f1407fa5b2ca8"
+       "rev": "8476aa70b71db29af398e70bb8a00298c1e64b86"
      }
    ],
    "packages" : {
@@ -451,10 +451,10 @@
        ]
      },
      "dune": {
-       "version": "3.16.0",
+       "version": "3.16.1",
        "src": {
-         "url": "https://github.com/ocaml/dune/releases/download/3.16.0/dune-3.16.0.tbz",
-         "sha256": "5481dde7918ca3121e02c34d74339f734b32d5883efb8c1b8056471e74f9bda6"
+         "url": "https://github.com/ocaml/dune/releases/download/3.16.1/dune-3.16.1.tbz",
+         "sha256": "b781ae20f87613c2a11bd0717809e00470c82d615e15264f9a64e033051ac3de"
        },
        "depends": [
          "base-threads",
@@ -463,10 +463,10 @@
        ]
      },
      "dune-configurator": {
-       "version": "3.16.0",
+       "version": "3.16.1",
        "src": {
-         "url": "https://github.com/ocaml/dune/releases/download/3.16.0/dune-3.16.0.tbz",
-         "sha256": "5481dde7918ca3121e02c34d74339f734b32d5883efb8c1b8056471e74f9bda6"
+         "url": "https://github.com/ocaml/dune/releases/download/3.16.1/dune-3.16.1.tbz",
+         "sha256": "b781ae20f87613c2a11bd0717809e00470c82d615e15264f9a64e033051ac3de"
        },
        "depends": [
          "base-unix",

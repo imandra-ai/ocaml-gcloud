@@ -17,11 +17,16 @@
           path = ./.;
           roots = opamFiles;
           lock = ./onix-lock.json;
+          deps = { "ocaml-system" = "*"; };
         };
         onixEnvDev = onix'.env {
           path = ./.;
           roots = opamFiles ++ [ ./gcloud-melange.opam ];
           lock = ./onix-lock-dev.json;
+          deps = {
+            "ocaml-system" = "*";
+            "ocaml-lsp-server" = "*";
+          };
         };
 
       in rec {

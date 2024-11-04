@@ -21,5 +21,5 @@ format:
 
 onix-lock:
 	onix lock ./gcloud.opam ./gcloud-cli.opam --resolutions="ocaml-system=5.2.0" --lock-file ./onix-lock.json
-	onix lock ./gcloud.opam ./gcloud-cli.opam ./gcloud-melange.opam --resolutions="ocaml-system=5.2.0" --with-dev-setup=true --with-test=true --lock-file ./onix-lock-dev.json
+	onix lock ./gcloud.opam ./gcloud-cli.opam ./gcloud-melange.opam --resolutions="ocaml-system=5.2.0,ocaml-lsp-server" --with-dev-setup=true --with-test=true --lock-file ./onix-lock-dev.json
 	git add onix-lock.json onix-lock-dev.json
