@@ -184,3 +184,34 @@ let list_objects ?(delimiter : string option) ?(prefix : string option)
   | `OK ->
       Error.parse_body_json list_objects_response_of_yojson body |> Lwt.return
   | status_code -> Error.of_response_status_code_and_body status_code body
+
+let delete_object (bucket_name : string) (object_path : string) :
+    (unit, [> Error.t ]) Lwt_result.t =
+  let open Lwt_result.Syntax in
+  let* token_info =
+    Common.get_access_token ~scopes:[ Scopes.devstorage_read_write ] ()
+  in
+  let* resp, body =
+    Lwt.catch
+      (fun () ->
+        let uri =
+          Uri.make () ~scheme:"https" ~host:"storage.googleapis.com"
+            ~path:
+              (Printf.sprintf "storage/v1/b/%s/o/%s" bucket_name
+                 (Uri.pct_encode object_path))
+        in
+        let headers =
+          Cohttp.Header.of_list
+            [
+              ( "Authorization",
+                Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
+            ]
+        in
+        let open Lwt.Infix in
+        Cohttp_lwt_unix.Client.delete uri ~headers >>= Util.consume_body |> ok)
+      (fun e -> Lwt_result.fail (`Network_error e))
+  in
+  match Cohttp.Response.status resp with
+  (* Deletion returns a 204 *)
+  | Cohttp.Code.(#success_status) -> Lwt_result.return ()
+  | status_code -> Error.of_response_status_code_and_body status_code body
