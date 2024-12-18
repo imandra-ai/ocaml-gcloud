@@ -94,7 +94,7 @@ type rewrite_object_response = {
   kind : string;
   total_bytes_rewritten : string; [@key "totalBytesRewritten"]
   object_size : string; [@key "objectSize"]
-  done_ : bool;
+  done_ : bool; [@key "done"]
   rewrite_token : string option; [@key "rewriteToken"] [@default None]
   resource : Yojson.Safe.t option; [@default None]
 }
@@ -111,6 +111,8 @@ let rewrite_object source_bucket source_object destination_bucket
   Lwt.catch
     (fun () ->
       let uri =
+        let source_object = Uri.pct_encode source_object in
+        let destination_object = Uri.pct_encode destination_object in
         Uri.make () ~scheme:"https" ~host:"storage.googleapis.com"
           ~path:
             (Printf.sprintf "storage/v1/b/%s/o/%s/rewriteTo/b/%s/o/%s"
