@@ -53,8 +53,8 @@ let get_object (bucket_name : string) (object_path : string) :
   get_object_stream bucket_name object_path >>= fun stream ->
   Lwt_stream.to_list stream |> Lwt.map (String.concat "") |> Lwt_result.ok
 
-let insert_object_ ~if_generation_match bucket_name name
-    (body : Cohttp_lwt.Body.t) : (object_, [> Error.t ]) Lwt_result.t =
+let insert_object_ ~if_generation_match ~if_generation_not_match bucket_name
+    name (body : Cohttp_lwt.Body.t) : (object_, [> Error.t ]) Lwt_result.t =
   let open Lwt_result.Infix in
   Common.get_access_token ~scopes:[ Scopes.devstorage_read_write ] ()
   >>= fun token_info ->
@@ -68,9 +68,11 @@ let insert_object_ ~if_generation_match bucket_name name
               (match if_generation_match with
               | Some v -> [ ("ifGenerationMatch", [ string_of_int v ]) ]
               | None -> []);
+              (match if_generation_not_match with
+              | Some v -> [ ("ifGenerationNotMatch", [ string_of_int v ]) ]
+              | None -> []);
             ]
         in
-
         Uri.make () ~scheme:"https" ~host:"storage.googleapis.com"
           ~path:(Printf.sprintf "upload/storage/v1/b/%s/o" bucket_name)
           ~query
@@ -90,15 +92,18 @@ let insert_object_ ~if_generation_match bucket_name name
   | `OK -> Error.parse_body_json object__of_yojson body |> Lwt.return
   | status_code -> Error.of_response_status_code_and_body status_code body
 
-let insert_object ?(if_generation_match = None) bucket_name name (data : string)
-    : (object_, [> Error.t ]) Lwt_result.t =
+let insert_object ?if_generation_match ?if_generation_not_match bucket_name name
+    (data : string) : (object_, [> Error.t ]) Lwt_result.t =
   let body = Cohttp_lwt.Body.of_string data in
-  insert_object_ ~if_generation_match bucket_name name body
+  insert_object_ ~if_generation_match ~if_generation_not_match bucket_name name
+    body
 
-let insert_object_stream ?(if_generation_match = None) bucket_name name
-    (data : string Lwt_stream.t) : (object_, [> Error.t ]) Lwt_result.t =
+let insert_object_stream ?if_generation_match ?if_generation_not_match
+    bucket_name name (data : string Lwt_stream.t) :
+    (object_, [> Error.t ]) Lwt_result.t =
   let body = Cohttp_lwt.Body.of_stream data in
-  insert_object_ ~if_generation_match bucket_name name body
+  insert_object_ ~if_generation_match ~if_generation_not_match bucket_name name
+    body
 
 type rewrite_object_response = {
   kind : string;
@@ -197,7 +202,8 @@ let list_objects ?(delimiter : string option) ?(prefix : string option)
       Error.parse_body_json list_objects_response_of_yojson body |> Lwt.return
   | status_code -> Error.of_response_status_code_and_body status_code body
 
-let delete_object (bucket_name : string) (object_path : string) :
+let delete_object ?if_generation_match ?if_generation_not_match
+    (bucket_name : string) (object_path : string) :
     (unit, [> Error.t ]) Lwt_result.t =
   let open Lwt_result.Syntax in
   let* token_info =
@@ -207,10 +213,22 @@ let delete_object (bucket_name : string) (object_path : string) :
     Lwt.catch
       (fun () ->
         let uri =
+          let query =
+            List.concat
+              [
+                (match if_generation_match with
+                | Some v -> [ ("ifGenerationMatch", [ string_of_int v ]) ]
+                | None -> []);
+                (match if_generation_not_match with
+                | Some v -> [ ("ifGenerationNotMatch", [ string_of_int v ]) ]
+                | None -> []);
+              ]
+          in
           Uri.make () ~scheme:"https" ~host:"storage.googleapis.com"
             ~path:
               (Printf.sprintf "storage/v1/b/%s/o/%s" bucket_name
                  (Uri.pct_encode object_path))
+            ~query
         in
         let headers =
           Cohttp.Header.of_list
