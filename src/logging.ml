@@ -19,7 +19,7 @@ module Entries = struct
       (fun () ->
         let uri =
           Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
-            ~path:"v2/entries:list"
+            ~path:"v2/entries"
         in
         let headers =
           Cohttp.Header.of_list
