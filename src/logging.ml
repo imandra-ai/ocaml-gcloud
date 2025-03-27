@@ -18,8 +18,8 @@ module Entries = struct
     Lwt.catch
       (fun () ->
         let uri =
-          Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
-            ~path:"v2/entries"
+          Uri.make () ~scheme:"https" ~host:"logging.googleapis.com"
+            ~path:"v2/entries:list"
         in
         let headers =
           Cohttp.Header.of_list
