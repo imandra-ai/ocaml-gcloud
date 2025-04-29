@@ -91,15 +91,28 @@ let report ?project_id (report_request : report_request) :
       | _ -> Error.of_response_status_code_and_body status body)
     (fun e -> Lwt_result.fail (`Network_error e))
 
+(** Generate an exception-shaped string to trigger Stackdriver error reporting.
+
+    Supply [pos_opt] or [src_name_opt] to get a more informative stacktrace.
+    [type_] should be a title case error name ending in "Exception" or "Error".
+
+    We force our message to resemble a stacktrace to trigger Stackdriver error
+    reporting.  Note, when using this string in a structured log, don't
+    additionally set "@type" to
+    "type.googleapis.com/google.devtools.clouderrorreporting.v1beta1.ReportedErrorEvent",
+    which results in a slightly less informative Slack notification.
+
+    https://cloud.google.com/error-reporting/docs/formatting-error-messages
+    https://www.googlecloudcommunity.com/gc/Google-Cloud-s-operations-suite/How-to-show-an-error-title-in-Error-Reporting-slack-messages/m-p/661669
+*)
 let stackdriver_nodejs_format ?pos:(pos_opt : Lexing.position option)
-    ~(type_ : string) (msg : string) =
-  (* Format ocaml backtrace in 'nodejs format' so stackdriver notices it *)
-  (* Preferring this to reportLocation as it is much more viewable in the stackdriver error UI *)
-  (* type_ should be a JS error name with casing, e.g. ReferenceError or MyError *)
+    ?src_name:(src_name_opt : string option) ~(type_ : string) (msg : string) =
   let open Lexing in
-  match pos_opt with
-  | None -> Printf.sprintf "%s: %s" type_ msg
-  | Some pos ->
-      Printf.sprintf "%s: %s\n\tat <anonymous> (%s:%d:%d)" type_ msg
-        pos.pos_fname pos.pos_lnum
+  Printf.sprintf "%s: %s\n\tat <anonymous> " type_ msg
+  ^
+  match (pos_opt, src_name_opt) with
+  | Some pos, _ ->
+      Printf.sprintf "(%s:%d:%d)" pos.pos_fname pos.pos_lnum
         (pos.pos_cnum - pos.pos_bol)
+  | _, Some src_name -> Printf.sprintf "(%s)" src_name
+  | _, _ -> "(unknown location)"
