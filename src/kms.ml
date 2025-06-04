@@ -98,13 +98,16 @@ module V1 = struct
           | `OK ->
               Error.parse_body_json
                 (function
-                  | `Assoc [ ("ciphertext", `String ciphertext) ] -> (
-                      try
-                        Ok
-                          (Base64.decode_exn ~alphabet:Base64.uri_safe_alphabet
-                             ciphertext)
-                      with Not_found ->
-                        Error "Could not base64-decode the ciphertext")
+                  | `Assoc fields -> (
+                      match List.assoc_opt "ciphertext" fields with
+                      | Some (`String ciphertext) -> (
+                          try
+                            Ok
+                              (Base64.decode_exn
+                                 ~alphabet:Base64.uri_safe_alphabet ciphertext)
+                          with Invalid_argument _ ->
+                            Error "Could not base64-decode the ciphertext")
+                      | _ -> Error "Expected an object with field 'ciphertext'")
                   | _ -> Error "Expected an object with field 'ciphertext'")
                 body
               |> Lwt.return
