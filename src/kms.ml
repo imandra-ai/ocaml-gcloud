@@ -101,10 +101,7 @@ module V1 = struct
                   | `Assoc fields -> (
                       match List.assoc_opt "ciphertext" fields with
                       | Some (`String ciphertext) -> (
-                          try
-                            Ok
-                              (Base64.decode_exn
-                                 ~alphabet:Base64.uri_safe_alphabet ciphertext)
+                          try Ok (Base64.decode_exn ciphertext)
                           with Invalid_argument _ ->
                             Error "Could not base64-decode the ciphertext")
                       | _ -> Error "Expected an object with field 'ciphertext'")
