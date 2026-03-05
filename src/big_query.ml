@@ -345,7 +345,8 @@ module Jobs = struct
         let v =
           match param_value_to_yojson p.type_ with
           | `Assoc [ ("value", v) ] -> Yojson.Safe.to_string v
-          | _ -> failwith "unexpected param JSON"
+          | x -> Yojson.Safe.to_string x
+          (* failwith "unexpected param JSON" *)
         in
         (p.name, v)
     end
@@ -727,14 +728,21 @@ module Jobs = struct
           request |> query_request_to_yojson |> Yojson.Safe.to_string
         in
         let body = body_str |> Cohttp_lwt.Body.of_string in
-        L.debug (fun m ->
+        L.err (fun m ->
             let truncate str =
               if String.length str > 1000 then CCString.sub str 0 1000 ^ "..."
               else str
             in
             let q_trimmed =
-              q |> CCString.replace ~sub:"\n" ~by:" " |> truncate
+              q |> CCString.replace ~sub:"\n" ~by:" "
+              (* |> truncate *)
             in
+            (* let _p_whatever =
+                params
+                |> List.map Param.Debug.to_string
+                |> List.map (fun (a, b) -> Format.sprintf "%s %s" a b)
+                |> String.concat " "
+               in *)
             m "Query: %s" q_trimmed)
         |> Lwt_result.ok
         >>= fun () ->
