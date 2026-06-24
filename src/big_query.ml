@@ -51,11 +51,14 @@ module Schema = struct
   type field = {
     name : string;
     description : string option; [@default None]
-    mode : mode;
+    mode : mode; [@default NULLABLE]
     bq_type : bq_type; [@key "type"]
     fields : field list; [@default []]
   }
-  [@@deriving make, yojson]
+  [@@deriving yojson]
+
+  let make_field ~name ?(description = None) ~mode ~bq_type ?(fields = []) () =
+    { name; description; mode; bq_type; fields }
 
   [@@@warning "+39"]
 
