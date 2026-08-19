@@ -26,7 +26,7 @@
    ppx_deriving_yojson
   (ppx_here :with-test)
   (tls :with-test)
-  (x509 ( >= 0.12.0)) ;; Required for the ~sloppy:true arg becoming the default
+  (x509 (and ( >= 0.12.0) ( < 1.0.0)) ;; Required for the ~sloppy:true arg becoming the default
    yojson))
 
 (package
