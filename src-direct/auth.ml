@@ -2,9 +2,8 @@
     pure helpers come from {!Gcloud.Auth}.
 
     Supported credentials: service account key files, authorized-user
-    (gcloud ADC) refresh tokens, and the GCE metadata server. External-account
-    (workload identity federation) credentials are not ported; use
-    [gcloud-lwt] for those. *)
+    (gcloud ADC) refresh tokens, the GCE metadata server, and external-account
+    (workload identity federation) credentials with a URL credential source. *)
 
 include Gcloud.Auth
 
@@ -56,6 +55,18 @@ let post_form (uri : Uri.t) (params : (string * string list) list) :
   let status, body =
     Http_ezcurl.call ~meth:`POST ~headers
       ~body:(Uri.encoded_of_query params)
+      uri
+  in
+  (Cohttp.Response.make ~status (), body)
+
+let post_json ?(headers = []) (uri : Uri.t) (json : Yojson.Basic.t) :
+    Cohttp.Response.t * string =
+  let headers =
+    Cohttp.Header.of_list (("Content-Type", "application/json") :: headers)
+  in
+  let status, body =
+    Http_ezcurl.call ~meth:`POST ~headers
+      ~body:(Yojson.Basic.to_string json)
       uri
   in
   (Cohttp.Response.make ~status (), body)
@@ -122,11 +133,58 @@ let access_token_of_credentials (scopes : string list)
           ~headers:Compute_engine.Metadata.metadata_headers uri
       in
       access_token_of_response (Cohttp.Response.make ~status (), body)
-  | External_account _ ->
-      Stdlib.Error
-        (`Bad_token_response
-          "external_account credentials are not supported by \
-           Gcloud_direct.Auth (use gcloud-lwt)")
+  | External_account (c : External_account_credentials.t) -> (
+      (* Workload Identity Federation (only tested via GitHub Actions):
+         fetch the subject token, exchange it at the STS endpoint, then
+         optionally impersonate a service account. The IAM scope is needed
+         for impersonation and on refresh. *)
+      let scopes = Scopes.iam :: scopes in
+      Log.debug (fun m -> m "Requesting subject token");
+      let* subject_token =
+        let status, body =
+          Http_ezcurl.call ~meth:`GET
+            ~headers:(Cohttp.Header.of_list c.credential_source.headers)
+            (Uri.of_string c.credential_source.url)
+        in
+        External_account_credentials.subject_token_of_response c
+          (Cohttp.Response.make ~status (), body)
+      in
+      Log.debug (fun m -> m "Performing token exchange");
+      let res =
+        post_json
+          (Uri.of_string c.token_url)
+          (`Assoc
+            [
+              ( "grantType",
+                `String "urn:ietf:params:oauth:grant-type:token-exchange" );
+              ("audience", `String c.audience);
+              ("scope", `String (String.concat " " scopes));
+              ( "requestedTokenType",
+                `String "urn:ietf:params:oauth:token-type:access_token" );
+              ("subjectToken", `String subject_token);
+              ("subjectTokenType", `String c.subject_token_type);
+            ])
+      in
+      match c.service_account_impersonation_url with
+      | None -> access_token_of_response ~of_json:access_token_of_json res
+      | Some sac ->
+          Log.debug (fun m -> m "attempting to impersonate service account");
+          let* initial_access_token = access_token_of_response res in
+          let headers =
+            [
+              ( "Authorization",
+                Printf.sprintf "Bearer %s" initial_access_token.access_token );
+            ]
+          in
+          let uri = Uri.of_string sac in
+          Log.debug (fun m -> m "POST %a" Uri.pp_hum uri);
+          let res =
+            post_json ~headers uri
+              (`Assoc
+                [ ("scope", `List (List.map (fun s -> `String s) scopes)) ])
+          in
+          access_token_of_response ~of_json:impersonated_access_token_of_json
+            res)
 
 let discover_credentials_with (discovery_mode : discovery_mode) :
     (credentials, [> error ]) result =

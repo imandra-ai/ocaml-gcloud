@@ -15,7 +15,7 @@ OCaml bindings to the Google Cloud Platform APIs
 - `gcloud-direct`: direct-style backend for OCaml 5 thread pools and effect
   schedulers (moonpool, picos): blocking HTTP via ezcurl/libcurl
   (`Client_ezcurl`), credential discovery (`Auth`, `Common`; service-account
-  keys, gcloud ADC and GCE metadata), and every service module instantiated
+  keys, gcloud ADC, GCE metadata and workload identity federation), and every service module instantiated
   under its usual name, e.g. `Gcloud_direct.Batch.V1.Projects.Locations.Jobs.create`.
   `Async_task_direct.sleep` blocks the thread; the optional
   `gcloud-direct.picos` sub-library provides `Async_task_picos` with a

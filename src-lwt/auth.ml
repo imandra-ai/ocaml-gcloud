@@ -205,41 +205,8 @@ let access_token_of_credentials (scopes : string list)
             Cohttp_lwt_unix.Client.post uri ~headers ~body
             >>= Util.consume_body |> ok
           in
-          let access_token_of_json (json : Yojson.Basic.t) :
-              (Access_token.t, [> error ]) result =
-            (* has a slightly different format from the access token in the other responses:
-               - camel case fields
-               - expireTime rather than expiresIn
-            *)
-            let open CCResult.Infix in
-            let* access_token, expire_time =
-              try
-                let open Yojson.Basic.Util in
-                let access_token = json |> member "accessToken" |> to_string in
-                let expire_time = json |> member "expireTime" |> to_string in
-                Ok (access_token, expire_time)
-              with Yojson.Basic.Util.Type_error (_msg, _) ->
-                Error (`Bad_token_response Yojson.Basic.(to_string json))
-            in
-            let* t, _tz, _count =
-              Ptime.of_rfc3339 expire_time
-              |> CCResult.map_err (fun _ ->
-                     `Bad_token_response
-                       (Format.asprintf "couldn't parse expireTime from: %s"
-                          Yojson.Basic.(to_string json)))
-            in
-            let now = Ptime_clock.now () in
-            let* expires_in =
-              match Ptime.diff t now |> Ptime.Span.to_int_s with
-              | None ->
-                  Error (`Bad_token_response Yojson.Basic.(to_string json))
-              | Some expires_in -> Ok expires_in
-            in
-            Ok
-              (Access_token.make ~access_token ~expires_in
-                 ~additional_refresh_scopes:[ Scopes.iam ] ())
-          in
-          access_token_of_response ~of_json:access_token_of_json res
+          access_token_of_response ~of_json:impersonated_access_token_of_json
+            res
           |> Lwt.return)
 
 let discover_credentials_with (discovery_mode : discovery_mode) =

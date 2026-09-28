@@ -189,4 +189,27 @@ let tests : unit Alcotest_lwt.test_case list =
         | Error e -> Alcotest.failf "Error: %a" Gcloud.Auth.pp_error e);
         Unix.putenv
           Gcloud.Auth.Environment_vars.google_application_credentials_json "");
+    Alcotest_lwt.test_case_sync "impersonated access token parses" `Quick
+      (fun () ->
+        let expire_time =
+          Ptime.add_span (Ptime_clock.now ()) (Ptime.Span.of_int_s 3600)
+          |> Option.get
+          |> Ptime.to_rfc3339 ~tz_offset_s:0
+        in
+        let json =
+          `Assoc
+            [
+              ("accessToken", `String "tok"); ("expireTime", `String expire_time);
+            ]
+        in
+        match Gcloud.Auth.impersonated_access_token_of_json json with
+        | Ok t ->
+            Alcotest.(check string) "token" "tok" t.access_token;
+            Alcotest.(check bool)
+              "expires_in ~1h" true
+              (t.expires_in >= 3590 && t.expires_in <= 3600);
+            Alcotest.(check (list string))
+              "refresh scopes" [ Gcloud.Auth.Scopes.iam ]
+              t.additional_refresh_scopes
+        | Error (`Bad_token_response msg) -> Alcotest.failf "Error: %s" msg);
   ]

@@ -11,6 +11,8 @@
   ezgzip
   logs
   ppx_deriving_yojson.runtime
+  ptime
+  ptime.clock.os
   unix
   uri
   yojson))

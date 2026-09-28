@@ -270,6 +270,38 @@ let access_token_of_json (json : Yojson.Basic.t) :
   with Yojson.Basic.Util.Type_error (_msg, _) ->
     Error (`Bad_token_response Yojson.Basic.(to_string json))
 
+(** Response of the IAM [generateAccessToken] endpoint used for service
+    account impersonation. It differs from the OAuth token responses: camel
+    case fields, and an RFC 3339 [expireTime] instead of [expires_in]. *)
+let impersonated_access_token_of_json (json : Yojson.Basic.t) :
+    (Access_token.t, [> `Bad_token_response of string ]) result =
+  let open CCResult.Infix in
+  let* access_token, expire_time =
+    try
+      let open Yojson.Basic.Util in
+      let access_token = json |> member "accessToken" |> to_string in
+      let expire_time = json |> member "expireTime" |> to_string in
+      Ok (access_token, expire_time)
+    with Yojson.Basic.Util.Type_error (_msg, _) ->
+      CCResult.fail (`Bad_token_response Yojson.Basic.(to_string json))
+  in
+  let* t, _tz, _count =
+    Ptime.of_rfc3339 expire_time
+    |> CCResult.map_err (fun _ ->
+           `Bad_token_response
+             (Format.asprintf "couldn't parse expireTime from: %s"
+                Yojson.Basic.(to_string json)))
+  in
+  let now = Ptime_clock.now () in
+  let* expires_in =
+    match Ptime.diff t now |> Ptime.Span.to_int_s with
+    | None -> CCResult.fail (`Bad_token_response Yojson.Basic.(to_string json))
+    | Some expires_in -> Ok expires_in
+  in
+  Ok
+    (Access_token.make ~access_token ~expires_in
+       ~additional_refresh_scopes:[ Scopes.iam ] ())
+
 let authorized_user_credentials_of_json (json : Yojson.Basic.t) :
     user_refresh_credentials =
   let open Yojson.Basic.Util in
