@@ -4,7 +4,15 @@ build:
 
 .PHONY: test
 test:
-	dune exec src/test/test_main.exe
+	dune build @src/local-tests
+
+.PHONY: external-tests
+external-tests:
+	dune build @src/external-tests --force
+
+.PHONY: build-external-tests
+build-external-tests:
+	dune build src/external_test/external_tests.exe
 
 .PHONY: clean
 clean:

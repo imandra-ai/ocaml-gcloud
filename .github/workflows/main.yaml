@@ -40,7 +40,9 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y libcurl4-gnutls-dev
     - run: opam install ./src ./vendor/packed --deps-only --with-test
     - run: opam exec -- dune build
-    - run: opam exec -- dune build @src/runtest
+    - run: opam exec -- dune build @src/local-tests
+    # Compile-only: @external-tests needs GCP credentials.
+    - run: opam exec -- dune build src/external_test/external_tests.exe
 
   format:
     runs-on: ubuntu-latest
