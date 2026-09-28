@@ -26,6 +26,11 @@ jobs:
       uses: ocaml/setup-ocaml@v3
       with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
+    # ocurl (via gcloud-direct) needs libcurl headers. Refresh the apt index
+    # first: the runner image's index goes stale and opam's depext install
+    # then 404s on the package archive.
+    - name: Install system dependencies
+      run: sudo apt-get update && sudo apt-get install -y libcurl4-gnutls-dev
     - run: opam install . --deps-only --with-test
     - run: opam exec -- dune build
 
