@@ -210,7 +210,7 @@ module V1 : sig
           ?job_id:string ->
           ?request_id:string ->
           Job.t ->
-          (Job.t, [> Error.t ]) Lwt_result.t
+          (Job.t, [> Error.t ]) result Lwt.t
         (** Create a job. [job_id] must match [[a-z]([a-z0-9-]{0,61}[a-z0-9])?];
             a random one is generated if omitted. *)
 
@@ -219,7 +219,7 @@ module V1 : sig
           location:string ->
           job:string ->
           unit ->
-          (Job.t, [> Error.t ]) Lwt_result.t
+          (Job.t, [> Error.t ]) result Lwt.t
 
         val list :
           ?project_id:string ->
@@ -229,7 +229,7 @@ module V1 : sig
           ?page_size:int ->
           ?page_token:string ->
           unit ->
-          (List_jobs_response.t, [> Error.t ]) Lwt_result.t
+          (List_jobs_response.t, [> Error.t ]) result Lwt.t
         (** [order_by] is one of ["name"], ["name desc"], ["create_time"],
             ["create_time desc"]. *)
 
@@ -240,7 +240,7 @@ module V1 : sig
           ?request_id:string ->
           job:string ->
           unit ->
-          (Operation.t, [> Error.t ]) Lwt_result.t
+          (Operation.t, [> Error.t ]) result Lwt.t
         (** Delete a job. Returns a long-running operation; see
             {!Operations.get}. *)
 
@@ -250,7 +250,7 @@ module V1 : sig
           ?request_id:string ->
           job:string ->
           unit ->
-          (Operation.t, [> Error.t ]) Lwt_result.t
+          (Operation.t, [> Error.t ]) result Lwt.t
 
         val poll_until_complete :
           ?project_id:string ->
@@ -259,7 +259,7 @@ module V1 : sig
           ?timeout_s:float ->
           job:string ->
           unit ->
-          (Job.t, [> Error.t ]) Lwt_result.t
+          (Job.t, [> Error.t ]) result Lwt.t
         (** Poll {!get} every [poll_every_s] seconds (default 10) until the job
             reaches a terminal state ({!Job_state.is_terminal}) and return it.
             Fails with [`Gcloud_retry_timeout] once [timeout_s] elapses; waits
@@ -275,7 +275,7 @@ module V1 : sig
               ?task_group:string ->
               task:string ->
               unit ->
-              (Task.t, [> Error.t ]) Lwt_result.t
+              (Task.t, [> Error.t ]) result Lwt.t
             (** [task_group] defaults to ["group0"]; [task] is the task index,
                 e.g. ["0"]. *)
 
@@ -288,7 +288,7 @@ module V1 : sig
               ?page_size:int ->
               ?page_token:string ->
               unit ->
-              (List_tasks_response.t, [> Error.t ]) Lwt_result.t
+              (List_tasks_response.t, [> Error.t ]) result Lwt.t
             (** [filter] is of the form ["State=RUNNING"]. *)
           end
         end
@@ -296,7 +296,7 @@ module V1 : sig
 
       module Operations : sig
         val get :
-          name:string -> unit -> (Operation.t, [> Error.t ]) Lwt_result.t
+          name:string -> unit -> (Operation.t, [> Error.t ]) result Lwt.t
         (** [name] is the full operation name as returned in {!Operation.name}. *)
 
         val list :
@@ -306,10 +306,10 @@ module V1 : sig
           ?page_size:int ->
           ?page_token:string ->
           unit ->
-          (List_operations_response.t, [> Error.t ]) Lwt_result.t
+          (List_operations_response.t, [> Error.t ]) result Lwt.t
 
-        val cancel : name:string -> unit -> (unit, [> Error.t ]) Lwt_result.t
-        val delete : name:string -> unit -> (unit, [> Error.t ]) Lwt_result.t
+        val cancel : name:string -> unit -> (unit, [> Error.t ]) result Lwt.t
+        val delete : name:string -> unit -> (unit, [> Error.t ]) result Lwt.t
       end
     end
   end
@@ -722,14 +722,14 @@ module V1alpha : sig
           ?job_id:string ->
           ?request_id:string ->
           Job.t ->
-          (Job.t, [> Error.t ]) Lwt_result.t
+          (Job.t, [> Error.t ]) result Lwt.t
 
         val get :
           ?project_id:string ->
           location:string ->
           job:string ->
           unit ->
-          (Job.t, [> Error.t ]) Lwt_result.t
+          (Job.t, [> Error.t ]) result Lwt.t
 
         val list :
           ?project_id:string ->
@@ -739,7 +739,7 @@ module V1alpha : sig
           ?page_size:int ->
           ?page_token:string ->
           unit ->
-          (List_jobs_response.t, [> Error.t ]) Lwt_result.t
+          (List_jobs_response.t, [> Error.t ]) result Lwt.t
 
         val delete :
           ?project_id:string ->
@@ -748,7 +748,7 @@ module V1alpha : sig
           ?request_id:string ->
           job:string ->
           unit ->
-          (Operation.t, [> Error.t ]) Lwt_result.t
+          (Operation.t, [> Error.t ]) result Lwt.t
 
         val cancel :
           ?project_id:string ->
@@ -756,7 +756,7 @@ module V1alpha : sig
           ?request_id:string ->
           job:string ->
           unit ->
-          (Operation.t, [> Error.t ]) Lwt_result.t
+          (Operation.t, [> Error.t ]) result Lwt.t
 
         val patch :
           ?project_id:string ->
@@ -765,7 +765,7 @@ module V1alpha : sig
           update_mask:string ->
           job:string ->
           Job.t ->
-          (Job.t, [> Error.t ]) Lwt_result.t
+          (Job.t, [> Error.t ]) result Lwt.t
         (** Update a queued, scheduled or running job. Currently only
             increasing the first task group's [task_count] is supported, so
             [update_mask] must be ["taskGroups[0].taskCount"] (or
@@ -778,7 +778,7 @@ module V1alpha : sig
           ?timeout_s:float ->
           job:string ->
           unit ->
-          (Job.t, [> Error.t ]) Lwt_result.t
+          (Job.t, [> Error.t ]) result Lwt.t
 
         module TaskGroups : sig
           module Tasks : sig
@@ -789,7 +789,7 @@ module V1alpha : sig
               ?task_group:string ->
               task:string ->
               unit ->
-              (Task.t, [> Error.t ]) Lwt_result.t
+              (Task.t, [> Error.t ]) result Lwt.t
 
             val list :
               ?project_id:string ->
@@ -801,14 +801,14 @@ module V1alpha : sig
               ?page_size:int ->
               ?page_token:string ->
               unit ->
-              (List_tasks_response.t, [> Error.t ]) Lwt_result.t
+              (List_tasks_response.t, [> Error.t ]) result Lwt.t
           end
         end
       end
 
       module Operations : sig
         val get :
-          name:string -> unit -> (Operation.t, [> Error.t ]) Lwt_result.t
+          name:string -> unit -> (Operation.t, [> Error.t ]) result Lwt.t
 
         val list :
           ?project_id:string ->
@@ -817,10 +817,10 @@ module V1alpha : sig
           ?page_size:int ->
           ?page_token:string ->
           unit ->
-          (List_operations_response.t, [> Error.t ]) Lwt_result.t
+          (List_operations_response.t, [> Error.t ]) result Lwt.t
 
-        val cancel : name:string -> unit -> (unit, [> Error.t ]) Lwt_result.t
-        val delete : name:string -> unit -> (unit, [> Error.t ]) Lwt_result.t
+        val cancel : name:string -> unit -> (unit, [> Error.t ]) result Lwt.t
+        val delete : name:string -> unit -> (unit, [> Error.t ]) result Lwt.t
       end
 
       module ResourceAllowances : sig
@@ -830,14 +830,14 @@ module V1alpha : sig
           ?resource_allowance_id:string ->
           ?request_id:string ->
           Resource_allowance.t ->
-          (Resource_allowance.t, [> Error.t ]) Lwt_result.t
+          (Resource_allowance.t, [> Error.t ]) result Lwt.t
 
         val get :
           ?project_id:string ->
           location:string ->
           resource_allowance:string ->
           unit ->
-          (Resource_allowance.t, [> Error.t ]) Lwt_result.t
+          (Resource_allowance.t, [> Error.t ]) result Lwt.t
 
         val list :
           ?project_id:string ->
@@ -845,7 +845,7 @@ module V1alpha : sig
           ?page_size:int ->
           ?page_token:string ->
           unit ->
-          (List_resource_allowances_response.t, [> Error.t ]) Lwt_result.t
+          (List_resource_allowances_response.t, [> Error.t ]) result Lwt.t
 
         val delete :
           ?project_id:string ->
@@ -854,7 +854,7 @@ module V1alpha : sig
           ?request_id:string ->
           resource_allowance:string ->
           unit ->
-          (Operation.t, [> Error.t ]) Lwt_result.t
+          (Operation.t, [> Error.t ]) result Lwt.t
 
         val patch :
           ?project_id:string ->
@@ -863,7 +863,7 @@ module V1alpha : sig
           update_mask:string ->
           resource_allowance:string ->
           Resource_allowance.t ->
-          (Resource_allowance.t, [> Error.t ]) Lwt_result.t
+          (Resource_allowance.t, [> Error.t ]) result Lwt.t
       end
     end
   end

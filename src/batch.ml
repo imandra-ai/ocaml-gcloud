@@ -22,7 +22,7 @@ let query_opt (name : string) (value : string option) :
 let call_with_token ~(token_info : Auth.token_info) ~(meth : Cohttp.Code.meth)
     ?(query = []) ?(body : Yojson.Safe.t option) ~(path : string)
     (parse : Yojson.Safe.t -> ('a, string) result) :
-    ('a, [> Error.t ]) Lwt_result.t =
+    ('a, [> Error.t ]) result Lwt.t =
   let open Lwt_result.Infix in
   Lwt.catch
     (fun () ->
@@ -108,7 +108,7 @@ module Make_api (X : VERSION) = struct
 
   module Jobs = struct
     let create ?project_id ~location ?job_id ?request_id (job : X.Job.t) :
-        (X.Job.t, [> Error.t ]) Lwt_result.t =
+        (X.Job.t, [> Error.t ]) result Lwt.t =
       let query =
         List.concat
           [ query_opt "jobId" job_id; query_opt "requestId" request_id ]
@@ -117,7 +117,7 @@ module Make_api (X : VERSION) = struct
         ~path:(fun ~project_id -> path ~project_id ~location ^ "/jobs")
         X.Job.of_yojson
 
-    let get ?project_id ~location ~job () : (X.Job.t, [> Error.t ]) Lwt_result.t
+    let get ?project_id ~location ~job () : (X.Job.t, [> Error.t ]) result Lwt.t
         =
       call_in_project ?project_id ~meth:`GET
         ~path:(fun ~project_id ->
@@ -125,7 +125,7 @@ module Make_api (X : VERSION) = struct
         X.Job.of_yojson
 
     let list ?project_id ~location ?filter ?order_by ?page_size ?page_token () :
-        (X.List_jobs_response.t, [> Error.t ]) Lwt_result.t =
+        (X.List_jobs_response.t, [> Error.t ]) result Lwt.t =
       let query =
         List.concat
           [
@@ -140,7 +140,7 @@ module Make_api (X : VERSION) = struct
         X.List_jobs_response.of_yojson
 
     let delete ?project_id ~location ?reason ?request_id ~job () :
-        (Batch_types.Operation.t, [> Error.t ]) Lwt_result.t =
+        (Batch_types.Operation.t, [> Error.t ]) result Lwt.t =
       let query =
         List.concat
           [ query_opt "reason" reason; query_opt "requestId" request_id ]
@@ -151,7 +151,7 @@ module Make_api (X : VERSION) = struct
         Batch_types.Operation.of_yojson
 
     let cancel ?project_id ~location ?request_id ~job () :
-        (Batch_types.Operation.t, [> Error.t ]) Lwt_result.t =
+        (Batch_types.Operation.t, [> Error.t ]) result Lwt.t =
       let body =
         `Assoc
           (request_id
@@ -164,7 +164,7 @@ module Make_api (X : VERSION) = struct
         Batch_types.Operation.of_yojson
 
     let poll_until_complete ?project_id ~location ?(poll_every_s = 10.)
-        ?timeout_s ~job () : (X.Job.t, [> Error.t ]) Lwt_result.t =
+        ?timeout_s ~job () : (X.Job.t, [> Error.t ]) result Lwt.t =
       let open Lwt_result.Infix in
       let deadline =
         timeout_s |> CCOption.map (fun t -> Unix.gettimeofday () +. t)
@@ -191,7 +191,7 @@ module Make_api (X : VERSION) = struct
 
   module Tasks = struct
     let get ?project_id ~location ~job ?(task_group = "group0") ~task () :
-        (X.Task.t, [> Error.t ]) Lwt_result.t =
+        (X.Task.t, [> Error.t ]) result Lwt.t =
       call_in_project ?project_id ~meth:`GET
         ~path:(fun ~project_id ->
           Printf.sprintf "%s/jobs/%s/taskGroups/%s/tasks/%s"
@@ -201,7 +201,7 @@ module Make_api (X : VERSION) = struct
 
     let list ?project_id ~location ~job ?(task_group = "group0") ?filter
         ?order_by ?page_size ?page_token () :
-        (X.List_tasks_response.t, [> Error.t ]) Lwt_result.t =
+        (X.List_tasks_response.t, [> Error.t ]) result Lwt.t =
       let query =
         List.concat
           [
@@ -220,13 +220,13 @@ module Make_api (X : VERSION) = struct
   end
 
   module Operations = struct
-    let get ~name () : (Batch_types.Operation.t, [> Error.t ]) Lwt_result.t =
+    let get ~name () : (Batch_types.Operation.t, [> Error.t ]) result Lwt.t =
       call ~meth:`GET
         ~path:(Printf.sprintf "%s/%s" X.version name)
         Batch_types.Operation.of_yojson
 
     let list ?project_id ~location ?filter ?page_size ?page_token () :
-        (Batch_types.List_operations_response.t, [> Error.t ]) Lwt_result.t =
+        (Batch_types.List_operations_response.t, [> Error.t ]) result Lwt.t =
       let query =
         List.concat
           [
@@ -239,11 +239,11 @@ module Make_api (X : VERSION) = struct
         ~path:(fun ~project_id -> path ~project_id ~location ^ "/operations")
         Batch_types.List_operations_response.of_yojson
 
-    let cancel ~name () : (unit, [> Error.t ]) Lwt_result.t =
+    let cancel ~name () : (unit, [> Error.t ]) result Lwt.t =
       call ~meth:`POST ~body:(`Assoc [])
         ~path:(Printf.sprintf "%s/%s:cancel" X.version name) (fun _ -> Ok ())
 
-    let delete ~name () : (unit, [> Error.t ]) Lwt_result.t =
+    let delete ~name () : (unit, [> Error.t ]) result Lwt.t =
       call ~meth:`DELETE ~path:(Printf.sprintf "%s/%s" X.version name) (fun _ ->
           Ok ())
   end
@@ -900,7 +900,7 @@ module V1alpha = struct
         include Api.Jobs
 
         let patch ?project_id ~location ?request_id ~update_mask ~job
-            (body : Job.t) : (Job.t, [> Error.t ]) Lwt_result.t =
+            (body : Job.t) : (Job.t, [> Error.t ]) result Lwt.t =
           let query =
             List.concat
               [
@@ -924,7 +924,7 @@ module V1alpha = struct
       module ResourceAllowances = struct
         let create ?project_id ~location ?resource_allowance_id ?request_id
             (resource_allowance : Resource_allowance.t) :
-            (Resource_allowance.t, [> Error.t ]) Lwt_result.t =
+            (Resource_allowance.t, [> Error.t ]) result Lwt.t =
           let query =
             List.concat
               [
@@ -939,7 +939,7 @@ module V1alpha = struct
             Resource_allowance.of_yojson
 
         let get ?project_id ~location ~resource_allowance () :
-            (Resource_allowance.t, [> Error.t ]) Lwt_result.t =
+            (Resource_allowance.t, [> Error.t ]) result Lwt.t =
           call_in_project ?project_id ~meth:`GET
             ~path:(fun ~project_id ->
               Printf.sprintf "%s/resourceAllowances/%s"
@@ -948,7 +948,7 @@ module V1alpha = struct
             Resource_allowance.of_yojson
 
         let list ?project_id ~location ?page_size ?page_token () :
-            (List_resource_allowances_response.t, [> Error.t ]) Lwt_result.t =
+            (List_resource_allowances_response.t, [> Error.t ]) result Lwt.t =
           let query =
             List.concat
               [
@@ -962,7 +962,7 @@ module V1alpha = struct
             List_resource_allowances_response.of_yojson
 
         let delete ?project_id ~location ?reason ?request_id ~resource_allowance
-            () : (Operation.t, [> Error.t ]) Lwt_result.t =
+            () : (Operation.t, [> Error.t ]) result Lwt.t =
           let query =
             List.concat
               [ query_opt "reason" reason; query_opt "requestId" request_id ]
@@ -976,7 +976,7 @@ module V1alpha = struct
 
         let patch ?project_id ~location ?request_id ~update_mask
             ~resource_allowance (body : Resource_allowance.t) :
-            (Resource_allowance.t, [> Error.t ]) Lwt_result.t =
+            (Resource_allowance.t, [> Error.t ]) result Lwt.t =
           let query =
             List.concat
               [
