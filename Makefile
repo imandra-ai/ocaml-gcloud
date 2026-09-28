@@ -11,7 +11,7 @@ clean:
 	dune clean
 
 _opam:
-	opam switch create . ocaml-base-compiler.4.08.1 --empty
+	opam switch create . ocaml-base-compiler.5.1.1
 
 opam-install-deps:
 	opam install . --deps-only --working-dir --locked --with-test --yes
