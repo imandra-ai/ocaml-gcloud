@@ -1,0 +1,28 @@
+(library
+ (name gcloud_direct)
+ (public_name gcloud-direct)
+ (modules
+  (:standard \ async_task_picos))
+ (libraries
+  gcloud
+  cohttp
+  containers
+  cstruct
+  curl
+  ezcurl
+  jose
+  logs
+  uri
+  unix
+  x509
+  yojson))
+
+; Fiber-suspending sleep for picos schedulers with timer support. Optional so
+; the main package builds without picos installed.
+
+(library
+ (name gcloud_direct_picos)
+ (public_name gcloud-direct.picos)
+ (optional)
+ (modules async_task_picos)
+ (libraries gcloud picos_std.structured))

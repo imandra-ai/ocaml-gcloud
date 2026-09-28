@@ -48,6 +48,26 @@
    yojson))
 
 (package
+ (name gcloud-direct)
+ (synopsis "Direct-style (OCaml 5 effects / thread pool) backend for ocaml-gcloud")
+ (description "ezcurl HTTP client, credential discovery and direct-style instantiations of every gcloud service module, for moonpool, picos and plain threads. The optional gcloud-direct.picos sub-library adds a fiber-suspending sleep.")
+ (depends
+   gcloud
+   cohttp
+   containers
+   cstruct
+   dune
+   ezcurl
+   jose
+   logs
+   ocurl
+   uri
+  (x509 (and (>= 0.12.0) (< 1.0)))
+   yojson)
+ (depopts
+   picos_std))
+
+(package
  (name gcloud-melange)
  (synopsis "Bindings to Google Cloud Platform APIs")
  (description "")

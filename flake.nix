@@ -12,7 +12,7 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         onix' = onix.packages.${system}.latest;
-        opamFiles = [ ./gcloud.opam ./gcloud-lwt.opam ./gcloud-cli.opam ];
+        opamFiles = [ ./gcloud.opam ./gcloud-lwt.opam ./gcloud-direct.opam ./gcloud-cli.opam ];
         onixEnv = onix'.env {
           path = ./.;
           roots = opamFiles;
