@@ -22,6 +22,13 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+      with:
+        # NOT recursive: vendored repos' own vendor/ submodules must stay
+        # empty; prune-submodules.sh deletes their .gitmodules.
+        submodules: true
+        token: ${{ secrets.SUBMODULE_CLONE_TOKEN || github.token }}
+    - name: Prune nested submodules
+      run: ./prune-submodules.sh
     - name: Set up OCaml ${{ matrix.ocaml-compiler }}
       uses: ocaml/setup-ocaml@v3
       with:
@@ -31,13 +38,18 @@ jobs:
     # then 404s on the package archive.
     - name: Install system dependencies
       run: sudo apt-get update && sudo apt-get install -y libcurl4-gnutls-dev
-    - run: opam install . --deps-only --with-test
+    - run: opam install ./src ./vendor/packed --deps-only --with-test
     - run: opam exec -- dune build
+    - run: opam exec -- dune build @src/runtest
 
   format:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+      with:
+        submodules: true
+        token: ${{ secrets.SUBMODULE_CLONE_TOKEN || github.token }}
+    - run: ./prune-submodules.sh
     - uses: cachix/install-nix-action@v26
-    - run: nix-shell -I nixpkgs=channel:nixpkgs-unstable --pure -p ocamlformat_0_22_4 dune_3 ocaml --run "dune build @fmt"
+    - run: nix-shell -I nixpkgs=channel:nixpkgs-unstable --pure -p ocamlformat_0_22_4 dune_3 ocaml --run "dune build @src/fmt"

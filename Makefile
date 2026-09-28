@@ -2,28 +2,31 @@
 build:
 	dune build
 
-.PHONY: watch-build
-watch-build:
-	dune build -w
-
 .PHONY: test
 test:
-	dune exec test/test_main.exe
+	dune exec src/test/test_main.exe
 
 .PHONY: clean
 clean:
 	dune clean
 
+.PHONY: submodules
+submodules:
+	git submodule update --init
+	./prune-submodules.sh
+
 _opam:
 	opam switch create . ocaml-base-compiler.5.1.1 --empty
 
 opam-install-deps:
-	opam install . --deps-only --working-dir --locked --with-test --yes
+	opam install ./src ./vendor/packed --deps-only --working-dir --with-test --yes
 
 format:
 	dune build @fmt --auto-promote
 
 onix-lock:
-	onix lock ./gcloud.opam ./gcloud-lwt.opam ./gcloud-direct.opam ./gcloud-cli.opam --resolutions="ocaml-system=5.2.0" --lock-file ./onix-lock.json
-	onix lock ./gcloud.opam ./gcloud-lwt.opam ./gcloud-direct.opam ./gcloud-cli.opam ./gcloud-melange.opam --resolutions="ocaml-system=5.2.0,ocaml-lsp-server" --with-dev-setup=true --with-test=true --lock-file ./onix-lock-dev.json
+	onix lock $(OPAM_ROOTS) --resolutions="ocaml-system=5.2.0" --lock-file ./onix-lock.json
+	onix lock $(OPAM_ROOTS) ./src/gcloud-melange.opam --resolutions="ocaml-system=5.2.0,ocaml-lsp-server" --with-dev-setup=true --with-test=true --lock-file ./onix-lock-dev.json
 	git add onix-lock.json onix-lock-dev.json
+
+OPAM_ROOTS = ./src/gcloud.opam ./src/gcloud-lwt.opam ./src/gcloud-direct.opam ./src/gcloud-cli.opam ./vendor/packed/packed-error.opam ./vendor/packed/packed-error-factory.opam

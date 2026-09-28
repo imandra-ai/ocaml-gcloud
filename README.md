@@ -1,7 +1,13 @@
 OCaml bindings to the Google Cloud Platform APIs
 ================================================
 
-## Packages
+This is the composition root. The source lives in
+[imandra-ai/ocaml-gcloud-src](https://github.com/imandra-ai/ocaml-gcloud-src)
+(submodule `src/`), and its non-opam dependencies are vendored under
+`vendor/` (`packed`). Consumers that vendor these bindings should vendor
+`ocaml-gcloud-src` and `packed` side by side, not this repo.
+
+## Packages (defined in `src/`)
 
 - `gcloud`: runtime-agnostic core. Resource types, and each service
   (`Batch`, `Big_query`, `Storage`, `Pub_sub`, `Kms`, ...) as a functor
@@ -28,11 +34,11 @@ To use another runtime, implement the two signatures in `gcloud`
 
 ## Development
 
-The default nix devShell will have the packages needed to develop `ocaml-gcloud`:
-```
-nix develop '.#' # (or use nix-direnv)
-dune build ...
-```
+    $ git submodule update --init   # NOT --recursive
+    $ ./prune-submodules.sh
+    $ nix develop '.?submodules=1#' # (or use nix-direnv)
+    $ dune build
+
 
 ### Updating opam package set
 
