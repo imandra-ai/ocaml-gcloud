@@ -12,4 +12,6 @@ let () =
          ("container", Gcloud_tests.Container.tests);
          ("compute", Gcloud_tests.Compute.tests);
          ("secretmanager", Gcloud_tests.Secretmanager.tests);
+         ("batch", Gcloud_tests.Batch.tests);
+         ("batch v1alpha", Gcloud_tests.Batch.alpha_tests);
        ]

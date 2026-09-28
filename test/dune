@@ -16,7 +16,7 @@
   (pps ppx_here))
  (modules
   (:standard \ test_main))
- (libraries alcotest alcotest-lwt gcloud))
+ (libraries alcotest alcotest-lwt gcloud yojson))
 
 (rule
  (alias runtest)
