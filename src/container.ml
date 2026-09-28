@@ -1,5 +1,3 @@
-let ok = Lwt_result.ok
-
 module Scopes = struct
   let cloud_platform = "https://www.googleapis.com/auth/cloud-platform"
 end
@@ -33,36 +31,44 @@ module Projects = struct
       [@@deriving yojson { strict = false }]
 
       [@@@warning "+39"]
+    end
+  end
+end
 
-      let get ?project_id ~(location : string) ~(cluster : string) () :
-          (t, [> Error.t ]) Lwt_result.t =
-        let open Lwt_result.Infix in
-        Common.get_access_token ~scopes:[ Scopes.cloud_platform ] ()
-        >>= fun token_info ->
-        Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
-        Lwt.catch
-          (fun () ->
-            let uri =
-              Uri.make () ~scheme:"https" ~host:"container.googleapis.com"
-                ~path:
-                  (Printf.sprintf "v1beta1/projects/%s/locations/%s/clusters/%s"
-                     project_id location cluster)
-            in
-            let headers =
-              Cohttp.Header.of_list
-                [
-                  ( "Authorization",
-                    Printf.sprintf "Bearer %s"
-                      token_info.Auth.token.access_token );
-                ]
-            in
-            let open Lwt.Infix in
-            Cohttp_lwt_unix.Client.get uri ~headers >>= Util.consume_body |> ok)
-          (fun e -> Lwt_result.fail (`Network_error e))
-        >>= fun (resp, body) ->
-        match Cohttp.Response.status resp with
-        | `OK -> Error.parse_body_json of_yojson body |> Lwt.return
-        | status_code -> Error.of_response_status_code_and_body status_code body
+module Make
+    (Async : Async_task_sig.S)
+    (Client : Client_sig.S with type 'a task = 'a Async.t) =
+struct
+  type 'a task = 'a Async.t
+
+  module R = Async_task_result.Make (Async)
+  module Req = Request.Make (Async) (Client)
+  module Scopes = Scopes
+
+  module Projects = struct
+    module Locations = struct
+      module Clusters = struct
+        include Projects.Locations.Clusters
+
+        let get ?project_id ~(location : string) ~(cluster : string) () :
+            (t, [> Error.t ]) result task =
+          let open R.Infix in
+          Client.get_access_token ~scopes:[ Scopes.cloud_platform ] ()
+          >>= fun token_info ->
+          Client.get_project_id ?project_id ~token_info () >>= fun project_id ->
+          let uri =
+            Uri.make () ~scheme:"https" ~host:"container.googleapis.com"
+              ~path:
+                (Printf.sprintf "v1beta1/projects/%s/locations/%s/clusters/%s"
+                   project_id location cluster)
+          in
+          let headers = Cohttp.Header.of_list [ Req.bearer token_info ] in
+          Req.call ~meth:`GET ~headers uri >>= fun (status, body) ->
+          match status with
+          | `OK -> R.lift (Error.parse_body_json of_yojson body)
+          | status_code ->
+              R.lift (Error.of_response_status_code_and_body status_code body)
+      end
     end
   end
 end

@@ -1,5 +1,5 @@
-open Gcloud.Batch.V1
-module Alpha = Gcloud.Batch.V1alpha
+open Gcloud_lwt.Batch.V1
+module Alpha = Gcloud_lwt.Batch.V1alpha
 
 let json : Yojson.Safe.t Alcotest.testable =
   Alcotest.testable Yojson.Safe.pretty_print ( = )
@@ -282,7 +282,7 @@ let tests : unit Alcotest_lwt.test_case list =
               "at most page_size jobs" true
               (List.length resp.jobs <= 5)
             |> Lwt.return
-        | Error e -> Alcotest.failf "Error:\n%a" Gcloud.Error.pp e);
+        | Error e -> Alcotest.failf "Error:\n%a" Gcloud_lwt.Error.pp e);
   ]
 
 (* Shared types are the same across versions: a v1 Script is a v1alpha Script. *)

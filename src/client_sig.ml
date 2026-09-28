@@ -23,7 +23,7 @@ module type S = sig
   val get_access_token :
     scopes:string list -> unit -> (Auth.token_info, [> Error.t ]) result task
   (** An OAuth2 access token valid for [scopes]. Implementations are expected
-      to cache and refresh; see {!Common.get_access_token} for the Lwt
+      to cache and refresh; see [Gcloud_lwt.Common.get_access_token] for the Lwt
       behaviour. *)
 
   val get_project_id :
@@ -32,5 +32,5 @@ module type S = sig
     unit ->
     (string, [> Error.t ]) result task
   (** Resolve the project ID, preferring an explicitly passed one. See
-      {!Common.get_project_id} for the discovery order the Lwt backend uses. *)
+      [Gcloud_lwt.Common.get_project_id] for the discovery order the Lwt backend uses. *)
 end

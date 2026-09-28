@@ -1,8 +1,6 @@
 let src = Logs.Src.create "gcloud.bigquery"
 
-module L = (val Logs_lwt.src_log src)
-
-let ok = Lwt_result.ok
+module Log = (val Logs.src_log src : Logs.LOG)
 
 module Scopes = struct
   let bigquery = "https://www.googleapis.com/auth/bigquery"
@@ -70,62 +68,6 @@ module Schema = struct
 end
 
 module Datasets = struct
-  let get ?project_id ~dataset_id () : (string, [> Error.t ]) Lwt_result.t =
-    let open Lwt_result.Infix in
-    Common.get_access_token ~scopes:[ Scopes.bigquery ] () >>= fun token_info ->
-    Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
-    Lwt.catch
-      (fun () ->
-        let uri =
-          Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
-            ~path:
-              (Printf.sprintf "bigquery/v2/projects/%s/datasets/%s" project_id
-                 dataset_id)
-        in
-        let headers =
-          Cohttp.Header.of_list
-            [
-              ( "Authorization",
-                Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
-            ]
-        in
-        L.debug (fun m -> m "GET %a" Uri.pp_hum uri) |> Lwt_result.ok
-        >>= fun () ->
-        let open Lwt.Infix in
-        Cohttp_lwt_unix.Client.get uri ~headers >>= Util.consume_body |> ok)
-      (fun e -> `Network_error e |> Lwt_result.fail)
-    >>= fun (resp, body) ->
-    match Cohttp.Response.status resp with
-    | `OK -> Lwt_result.return body
-    | x -> Error.of_response_status_code_and_body x body
-
-  let list ?project_id () : (string, [> Error.t ]) Lwt_result.t =
-    let open Lwt_result.Infix in
-    Common.get_access_token ~scopes:[ Scopes.bigquery ] () >>= fun token_info ->
-    Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
-    Lwt.catch
-      (fun () ->
-        let uri =
-          Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
-            ~path:(Printf.sprintf "bigquery/v2/projects/%s/datasets" project_id)
-        in
-        let headers =
-          Cohttp.Header.of_list
-            [
-              ( "Authorization",
-                Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
-            ]
-        in
-        L.debug (fun m -> m "GET %a" Uri.pp_hum uri) |> Lwt_result.ok
-        >>= fun () ->
-        let open Lwt.Infix in
-        Cohttp_lwt_unix.Client.get uri ~headers >>= Util.consume_body |> ok)
-      (fun e -> `Network_error e |> Lwt_result.fail)
-    >>= fun (resp, body) ->
-    match Cohttp.Response.status resp with
-    | `OK -> Lwt_result.return body
-    | x -> Error.of_response_status_code_and_body x body
-
   module Tables = struct
     type table = {
       id : string;
@@ -144,52 +86,6 @@ module Datasets = struct
       totalItems : int;
     }
     [@@deriving yojson { strict = false }]
-
-    let list ?project_id ?max_results ?page_token ~dataset_id () :
-        (resp, [> Error.t ]) Lwt_result.t =
-      let open Lwt_result.Infix in
-      Common.get_access_token ~scopes:[ Scopes.bigquery ] ()
-      >>= fun token_info ->
-      Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
-      Lwt.catch
-        (fun () ->
-          let uri =
-            Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
-              ~path:
-                (Printf.sprintf "bigquery/v2/projects/%s/datasets/%s/tables"
-                   project_id dataset_id)
-          in
-
-          let uri =
-            match max_results with
-            | None -> uri
-            | Some max_results ->
-                Uri.add_query_param' uri
-                  ("maxResults", string_of_int max_results)
-          in
-          let uri =
-            match page_token with
-            | None -> uri
-            | Some page_token ->
-                Uri.add_query_param' uri ("pageToken", page_token)
-          in
-          let headers =
-            Cohttp.Header.of_list
-              [
-                ( "Authorization",
-                  Printf.sprintf "Bearer %s" token_info.Auth.token.access_token
-                );
-              ]
-          in
-          L.debug (fun m -> m "GET %a" Uri.pp_hum uri) |> Lwt_result.ok
-          >>= fun () ->
-          let open Lwt.Infix in
-          Cohttp_lwt_unix.Client.get uri ~headers >>= Util.consume_body |> ok)
-        (fun e -> `Network_error e |> Lwt_result.fail)
-      >>= fun (resp, body) ->
-      match Cohttp.Response.status resp with
-      | `OK -> Error.parse_body_json resp_of_yojson body |> Lwt.return
-      | x -> Error.of_response_status_code_and_body x body
   end
 end
 
@@ -679,181 +575,244 @@ module Jobs = struct
   let use_gzip () =
     Sys.getenv_opt "OCAML_GCLOUD_BQ_USE_GZIP"
     |> CCOption.map_or ~default:true bool_of_string
+end
 
-  let query ?project_id ?dry_run ?(use_legacy_sql = false) ?(params = [])
-      ?location ?use_int64_timestamp ?max_results q :
-      (query_response, [> Error.t ]) Lwt_result.t =
-    let parameter_mode =
-      if use_legacy_sql || params = [] then None else Some NAMED
-    in
+module Make
+    (Async : Async_task_sig.S)
+    (Client : Client_sig.S with type 'a task = 'a Async.t) =
+struct
+  type 'a task = 'a Async.t
 
-    let format_options =
-      use_int64_timestamp
-      |> CCOption.map (fun use_int64_timestamp -> { use_int64_timestamp })
-    in
+  module R = Async_task_result.Make (Async)
+  module Req = Request.Make (Async) (Client)
+  module Scopes = Scopes
+  module Schema = Schema
 
-    let request =
-      {
-        kind = "bigquery#queryRequest";
-        query = q;
-        dry_run;
-        use_legacy_sql;
-        location;
-        parameter_mode;
-        query_parameters = params;
-        format_options;
-        max_results;
-      }
-    in
+  let host = "www.googleapis.com"
 
-    let open Lwt_result.Infix in
-    Common.get_access_token ~scopes:[ Scopes.bigquery ] () >>= fun token_info ->
-    Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
-    let use_gzip = use_gzip () in
+  module Datasets = struct
+    let get ?project_id ~dataset_id () : (string, [> Error.t ]) result task =
+      let open R.Infix in
+      Client.get_access_token ~scopes:[ Scopes.bigquery ] ()
+      >>= fun token_info ->
+      Client.get_project_id ?project_id ~token_info () >>= fun project_id ->
+      let uri =
+        Uri.make () ~scheme:"https" ~host
+          ~path:
+            (Printf.sprintf "bigquery/v2/projects/%s/datasets/%s" project_id
+               dataset_id)
+      in
+      let headers = Cohttp.Header.of_list [ Req.bearer token_info ] in
+      Req.call ~meth:`GET ~headers uri >>= fun (status, body) ->
+      match status with
+      | `OK -> R.return body
+      | x -> R.lift (Error.of_response_status_code_and_body x body)
 
-    Lwt.catch
-      (fun () ->
+    let list ?project_id () : (string, [> Error.t ]) result task =
+      let open R.Infix in
+      Client.get_access_token ~scopes:[ Scopes.bigquery ] ()
+      >>= fun token_info ->
+      Client.get_project_id ?project_id ~token_info () >>= fun project_id ->
+      let uri =
+        Uri.make () ~scheme:"https" ~host
+          ~path:(Printf.sprintf "bigquery/v2/projects/%s/datasets" project_id)
+      in
+      let headers = Cohttp.Header.of_list [ Req.bearer token_info ] in
+      Req.call ~meth:`GET ~headers uri >>= fun (status, body) ->
+      match status with
+      | `OK -> R.return body
+      | x -> R.lift (Error.of_response_status_code_and_body x body)
+
+    module Tables = struct
+      include Datasets.Tables
+
+      let list ?project_id ?max_results ?page_token ~dataset_id () :
+          (resp, [> Error.t ]) result task =
+        let open R.Infix in
+        Client.get_access_token ~scopes:[ Scopes.bigquery ] ()
+        >>= fun token_info ->
+        Client.get_project_id ?project_id ~token_info () >>= fun project_id ->
         let uri =
-          Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
-            ~path:(Printf.sprintf "bigquery/v2/projects/%s/queries" project_id)
+          Uri.make () ~scheme:"https" ~host
+            ~path:
+              (Printf.sprintf "bigquery/v2/projects/%s/datasets/%s/tables"
+                 project_id dataset_id)
         in
-        let headers =
-          Cohttp.Header.of_list
-            [
-              ( "Authorization",
-                Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
-              ("Content-Type", "application/json");
-            ]
-          |> add_gzip_headers ~use_gzip
+        let uri =
+          match max_results with
+          | None -> uri
+          | Some max_results ->
+              Uri.add_query_param' uri ("maxResults", string_of_int max_results)
         in
-        let body_str =
-          request |> query_request_to_yojson |> Yojson.Safe.to_string
+        let uri =
+          match page_token with
+          | None -> uri
+          | Some page_token -> Uri.add_query_param' uri ("pageToken", page_token)
         in
-        let body = body_str |> Cohttp_lwt.Body.of_string in
-        L.debug (fun m ->
-            let truncate str =
-              if String.length str > 1000 then CCString.sub str 0 1000 ^ "..."
-              else str
-            in
-            let q_trimmed =
-              q |> CCString.replace ~sub:"\n" ~by:" " |> truncate
-            in
-            m "Query: %s" q_trimmed)
-        |> Lwt_result.ok
-        >>= fun () ->
-        let open Lwt.Infix in
-        Cohttp_lwt_unix.Client.post uri ~headers ~body
-        >>= Util.consume_body |> ok)
-      (fun e -> `Network_error e |> Lwt_result.fail)
-    >>= fun (resp, body) ->
-    match Cohttp.Response.status resp with
-    | `OK ->
-        Error.parse_body_json ~gzipped:use_gzip query_response_of_yojson body
-        |> Lwt.return
-        >>= fun response ->
-        L.debug (fun m -> m "%a" pp_query_response response) |> Lwt_result.ok
-        >>= fun () -> Lwt_result.return response
-    | status_code ->
-        Error.of_response_status_code_and_body ~gzipped:use_gzip status_code
-          body
+        let headers = Cohttp.Header.of_list [ Req.bearer token_info ] in
+        Req.call ~meth:`GET ~headers uri >>= fun (status, body) ->
+        match status with
+        | `OK -> R.lift (Error.parse_body_json resp_of_yojson body)
+        | x -> R.lift (Error.of_response_status_code_and_body x body)
+    end
+  end
 
-  let get_query_results ?page_token ?use_int64_timestamp
-      (job_reference : job_reference) :
-      (query_response, [> Error.t ]) Lwt_result.t =
-    let open Lwt_result.Infix in
-    let job_id =
-      match job_reference.job_id with
-      | None -> Error (`Gcloud_retry_timeout "get_query_results: no job_id")
-      | Some job_id -> Ok job_id
-    in
-    Lwt.return job_id >>= fun job_id ->
-    Auth.get_access_token ~scopes:[ Scopes.bigquery ] ()
-    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
-    >>= fun token_info ->
-    let query =
-      [
-        Some ("location", [ job_reference.location ]);
-        page_token
-        |> CCOption.map (fun page_token -> ("pageToken", [ page_token ]));
+  module Jobs = struct
+    include Jobs
+
+    let query ?project_id ?dry_run ?(use_legacy_sql = false) ?(params = [])
+        ?location ?use_int64_timestamp ?max_results q :
+        (query_response, [> Error.t ]) result task =
+      let parameter_mode =
+        if use_legacy_sql || params = [] then None else Some NAMED
+      in
+
+      let format_options =
         use_int64_timestamp
-        |> CCOption.map (fun b ->
-               ("formatOptions.useInt64Timestamp", [ string_of_bool b ]));
-      ]
-      |> CCList.filter_map CCFun.id
-    in
+        |> CCOption.map (fun use_int64_timestamp -> { use_int64_timestamp })
+      in
 
-    let use_gzip = use_gzip () in
+      let request =
+        {
+          kind = "bigquery#queryRequest";
+          query = q;
+          dry_run;
+          use_legacy_sql;
+          location;
+          parameter_mode;
+          query_parameters = params;
+          format_options;
+          max_results;
+        }
+      in
 
-    let uri =
-      Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
-        ~path:
-          (Printf.sprintf "bigquery/v2/projects/%s/queries/%s"
-             job_reference.project_id job_id)
-        ~query
-    in
-    let headers =
-      Cohttp.Header.of_list
+      let open R.Infix in
+      Client.get_access_token ~scopes:[ Scopes.bigquery ] ()
+      >>= fun token_info ->
+      Client.get_project_id ?project_id ~token_info () >>= fun project_id ->
+      let use_gzip = use_gzip () in
+      let uri =
+        Uri.make () ~scheme:"https" ~host
+          ~path:(Printf.sprintf "bigquery/v2/projects/%s/queries" project_id)
+      in
+      let headers =
+        Cohttp.Header.of_list
+          [ Req.bearer token_info; ("Content-Type", "application/json") ]
+        |> add_gzip_headers ~use_gzip
+      in
+      let body = request |> query_request_to_yojson |> Yojson.Safe.to_string in
+      Log.debug (fun m ->
+          let truncate str =
+            if String.length str > 1000 then CCString.sub str 0 1000 ^ "..."
+            else str
+          in
+          let q_trimmed = q |> CCString.replace ~sub:"\n" ~by:" " |> truncate in
+          m "Query: %s" q_trimmed);
+      Req.call ~meth:`POST ~headers ~body uri >>= fun (status, body) ->
+      match status with
+      | `OK ->
+          R.lift
+            (Error.parse_body_json ~gzipped:use_gzip query_response_of_yojson
+               body)
+          >>= fun response ->
+          Log.debug (fun m -> m "%a" pp_query_response response);
+          R.return response
+      | status_code ->
+          R.lift
+            (Error.of_response_status_code_and_body ~gzipped:use_gzip
+               status_code body)
+
+    let get_query_results ?page_token ?use_int64_timestamp
+        (job_reference : job_reference) :
+        (query_response, [> Error.t ]) result task =
+      let open R.Infix in
+      let job_id =
+        match job_reference.job_id with
+        | None -> Error (`Gcloud_retry_timeout "get_query_results: no job_id")
+        | Some job_id -> Ok job_id
+      in
+      R.lift job_id >>= fun job_id ->
+      Client.get_access_token ~scopes:[ Scopes.bigquery ] ()
+      >>= fun token_info ->
+      let query =
         [
-          ( "Authorization",
-            Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
+          Some ("location", [ job_reference.location ]);
+          page_token
+          |> CCOption.map (fun page_token -> ("pageToken", [ page_token ]));
+          use_int64_timestamp
+          |> CCOption.map (fun b ->
+                 ("formatOptions.useInt64Timestamp", [ string_of_bool b ]));
         ]
-      |> add_gzip_headers ~use_gzip
-    in
-    Lwt.catch
-      (fun () ->
-        let open Lwt.Infix in
-        Cohttp_lwt_unix.Client.get uri ~headers >>= Util.consume_body |> ok)
-      (fun e -> Lwt_result.fail (`Network_error e))
-    >>= fun (resp, body) ->
-    match Cohttp.Response.status resp with
-    | `OK ->
-        Error.parse_body_json ~gzipped:use_gzip query_response_of_yojson body
-        |> Lwt.return
-        >>= fun response ->
-        L.debug (fun m -> m "%a" pp_query_response response) |> Lwt_result.ok
-        >>= fun () -> Lwt_result.return response
-    | status_code ->
-        Error.of_response_status_code_and_body ~gzipped:use_gzip status_code
-          body
+        |> CCList.filter_map CCFun.id
+      in
 
-  let rec poll_until_complete ?(poll_every_s = 1.) ?(attempts = 5)
-      (query_response : query_response) :
-      (query_response_complete, [> Error.t ]) Lwt_result.t =
-    let open Lwt_result.Infix in
-    match query_response.job_complete with
-    | Some data ->
-        Lwt.return_ok
-          {
-            kind = query_response.kind;
-            job_reference = query_response.job_reference;
-            data;
-          }
-    | None ->
-        if attempts <= 0 then
-          Lwt.return_error
-            (`Gcloud_retry_timeout
-              "Big_query.Jobs.poll_until_complete: maximum number of retries \
-               reached")
-        else
-          Lwt_unix.sleep poll_every_s |> Lwt_result.ok >>= fun () ->
-          get_query_results query_response.job_reference
-          >>= poll_until_complete ~attempts:(attempts - 1)
+      let use_gzip = use_gzip () in
 
-  let fetch_all_rows (response : query_response_complete) =
-    let rec aux all_rows (response : query_response_complete) =
-      match response.data.page_token with
-      | None ->
-          Lwt_result.return
+      let uri =
+        Uri.make () ~scheme:"https" ~host
+          ~path:
+            (Printf.sprintf "bigquery/v2/projects/%s/queries/%s"
+               job_reference.project_id job_id)
+          ~query
+      in
+      let headers =
+        Cohttp.Header.of_list [ Req.bearer token_info ]
+        |> add_gzip_headers ~use_gzip
+      in
+      Req.call ~meth:`GET ~headers uri >>= fun (status, body) ->
+      match status with
+      | `OK ->
+          R.lift
+            (Error.parse_body_json ~gzipped:use_gzip query_response_of_yojson
+               body)
+          >>= fun response ->
+          Log.debug (fun m -> m "%a" pp_query_response response);
+          R.return response
+      | status_code ->
+          R.lift
+            (Error.of_response_status_code_and_body ~gzipped:use_gzip
+               status_code body)
+
+    let rec poll_until_complete ?(poll_every_s = 1.) ?(attempts = 5)
+        (query_response : query_response) :
+        (query_response_complete, [> Error.t ]) result task =
+      let open R.Infix in
+      match query_response.job_complete with
+      | Some data ->
+          R.return
             {
-              response with
-              data = { response.data with rows = Util.List.concat_rev all_rows };
+              kind = query_response.kind;
+              job_reference = query_response.job_reference;
+              data;
             }
-      | Some page_token ->
-          let open Lwt_result.Infix in
-          get_query_results ~page_token response.job_reference
-          >>= poll_until_complete
-          >>= fun response2 ->
-          aux (CCList.rev response2.data.rows :: all_rows) response2
-    in
-    aux [ CCList.rev response.data.rows ] response
+      | None ->
+          if attempts <= 0 then
+            R.fail
+              (`Gcloud_retry_timeout
+                "Big_query.Jobs.poll_until_complete: maximum number of retries \
+                 reached")
+          else
+            R.ok (Async.sleep poll_every_s) >>= fun () ->
+            get_query_results query_response.job_reference
+            >>= poll_until_complete ~attempts:(attempts - 1)
+
+    let fetch_all_rows (response : query_response_complete) =
+      let rec aux all_rows (response : query_response_complete) =
+        match response.data.page_token with
+        | None ->
+            R.return
+              {
+                response with
+                data =
+                  { response.data with rows = Util.List.concat_rev all_rows };
+              }
+        | Some page_token ->
+            let open R.Infix in
+            get_query_results ~page_token response.job_reference
+            >>= poll_until_complete
+            >>= fun response2 ->
+            aux (CCList.rev response2.data.rows :: all_rows) response2
+      in
+      aux [ CCList.rev response.data.rows ] response
+  end
 end

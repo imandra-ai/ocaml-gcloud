@@ -2,7 +2,7 @@
  (name cli)
  (modules :standard \ main)
  (package gcloud-cli)
- (libraries gcloud cmdliner logs))
+ (libraries gcloud-lwt cmdliner logs))
 
 (executable
  (name main)

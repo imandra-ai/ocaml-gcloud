@@ -77,14 +77,14 @@ let parse_body_json ?(gzipped = false)
 
 let of_response_status_code_and_body ?gzipped
     (status_code : Cohttp.Code.status_code) (body_str : string) :
-    ('a, [> t ]) Lwt_result.t =
+    ('a, [> t ]) result =
   match parse_body_json ?gzipped api_json_error_of_yojson body_str with
   | Ok parsed_error ->
-      Lwt_result.fail (`Gcloud_api_error (status_code, Json parsed_error))
+      Error (`Gcloud_api_error (status_code, Json parsed_error))
   | Error (`Json_parse_error (_, body_str)) ->
-      Lwt_result.fail (`Gcloud_api_error (status_code, Raw body_str))
+      Error (`Gcloud_api_error (status_code, Raw body_str))
   | Error e ->
-      Lwt_result.fail
+      Error
         (`Gcloud_api_error
           ( status_code,
             Raw (Format.asprintf "Error reading api error response: %a" pp e) ))

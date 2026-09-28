@@ -2,7 +2,7 @@ let tests : unit Alcotest_lwt.test_case list =
   [
     Alcotest_lwt.test_case "projects.locations.clusters.get" `Quick (fun _ () ->
         let open Lwt.Infix in
-        Gcloud.Container.Projects.Locations.Clusters.get
+        Gcloud_lwt.Container.Projects.Locations.Clusters.get
           ~project_id:"imandra-dev" ~location:"europe-west1-c"
           ~cluster:"imandra-markets-dev-cluster" ()
         >>= function
@@ -10,5 +10,5 @@ let tests : unit Alcotest_lwt.test_case list =
             Alcotest.(check string)
               "correct name" c.name "imandra-markets-dev-cluster"
             |> Lwt.return
-        | Error e -> Alcotest.failf "Error:\n%a" Gcloud.Error.pp e);
+        | Error e -> Alcotest.failf "Error:\n%a" Gcloud_lwt.Error.pp e);
   ]

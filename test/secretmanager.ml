@@ -4,7 +4,7 @@ let tests : unit Alcotest_lwt.test_case list =
     Alcotest_lwt.test_case "projects.secrets.versions.access" `Quick
       (fun _ () ->
         let open Lwt.Infix in
-        Gcloud.Secretmanager.V1.Projects.Secrets.Versions.access
+        Gcloud_lwt.Secretmanager.V1.Projects.Secrets.Versions.access
           ~name:"projects/imandra-dev/secrets/test-secret/versions/latest"
         >>= function
         | Ok c ->
@@ -16,5 +16,5 @@ let tests : unit Alcotest_lwt.test_case list =
               (Base64.decode_exn c.payload.data);
 
             Lwt.return ()
-        | Error e -> Alcotest.failf "Error:\n%a" Gcloud.Error.pp e);
+        | Error e -> Alcotest.failf "Error:\n%a" Gcloud_lwt.Error.pp e);
   ]

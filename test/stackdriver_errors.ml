@@ -3,12 +3,12 @@ let tests : unit Alcotest_lwt.test_case list =
     Alcotest_lwt.test_case "report" `Quick (fun _ () ->
         let open Lwt.Infix in
         (* https://cloud.google.com/error-reporting/docs/formatting-error-messages *)
-        Gcloud.Stackdriver_errors.report
+        Gcloud_lwt.Stackdriver_errors.report
           {
             event_time = None;
             message =
-              Gcloud.Stackdriver_errors.stackdriver_nodejs_format ~pos:[%here]
-                ~type_:"Error" "gcloud error report test message";
+              Gcloud_lwt.Stackdriver_errors.stackdriver_nodejs_format
+                ~pos:[%here] ~type_:"Error" "gcloud error report test message";
             context =
               Some
                 {
@@ -26,16 +26,17 @@ let tests : unit Alcotest_lwt.test_case list =
           }
         >>= function
         | Ok () -> Lwt.return ()
-        | Error e -> Alcotest.failf "Error:\n%a" Gcloud.Error.pp e);
+        | Error e -> Alcotest.failf "Error:\n%a" Gcloud_lwt.Error.pp e);
     Alcotest_lwt.test_case "report" `Quick (fun _ () ->
         let open Lwt.Infix in
         (* https://cloud.google.com/error-reporting/docs/formatting-error-messages *)
         let pos = [%here] in
-        Gcloud.Stackdriver_errors.report
+        Gcloud_lwt.Stackdriver_errors.report
           {
             event_time = None;
             message =
-              Gcloud.Stackdriver_errors.stackdriver_nodejs_format ~type_:"Error"
+              Gcloud_lwt.Stackdriver_errors.stackdriver_nodejs_format
+                ~type_:"Error"
                 "gcloud error report test message no pos in exception";
             context =
               Some
@@ -60,5 +61,5 @@ let tests : unit Alcotest_lwt.test_case list =
           }
         >>= function
         | Ok () -> Lwt.return ()
-        | Error e -> Alcotest.failf "Error:\n%a" Gcloud.Error.pp e);
+        | Error e -> Alcotest.failf "Error:\n%a" Gcloud_lwt.Error.pp e);
   ]

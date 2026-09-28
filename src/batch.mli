@@ -201,115 +201,121 @@ module V1 : sig
       [location] is a region such as ["us-central1"]. [project_id] falls back
       to the usual discovery (environment, credentials, Cloud SDK config). *)
 
-  module Projects : sig
-    module Locations : sig
-      module Jobs : sig
-        val create :
-          ?project_id:string ->
-          location:string ->
-          ?job_id:string ->
-          ?request_id:string ->
-          Job.t ->
-          (Job.t, [> Error.t ]) result Lwt.t
-        (** Create a job. [job_id] must match [[a-z]([a-z0-9-]{0,61}[a-z0-9])?];
+  module Make
+      (Async : Async_task_sig.S)
+      (_ : Client_sig.S with type 'a task = 'a Async.t) : sig
+    type 'a task = 'a Async.t
+
+    module Projects : sig
+      module Locations : sig
+        module Jobs : sig
+          val create :
+            ?project_id:string ->
+            location:string ->
+            ?job_id:string ->
+            ?request_id:string ->
+            Job.t ->
+            (Job.t, [> Error.t ]) result task
+          (** Create a job. [job_id] must match [[a-z]([a-z0-9-]{0,61}[a-z0-9])?];
             a random one is generated if omitted. *)
 
-        val get :
-          ?project_id:string ->
-          location:string ->
-          job:string ->
-          unit ->
-          (Job.t, [> Error.t ]) result Lwt.t
+          val get :
+            ?project_id:string ->
+            location:string ->
+            job:string ->
+            unit ->
+            (Job.t, [> Error.t ]) result task
 
-        val list :
-          ?project_id:string ->
-          location:string ->
-          ?filter:string ->
-          ?order_by:string ->
-          ?page_size:int ->
-          ?page_token:string ->
-          unit ->
-          (List_jobs_response.t, [> Error.t ]) result Lwt.t
-        (** [order_by] is one of ["name"], ["name desc"], ["create_time"],
+          val list :
+            ?project_id:string ->
+            location:string ->
+            ?filter:string ->
+            ?order_by:string ->
+            ?page_size:int ->
+            ?page_token:string ->
+            unit ->
+            (List_jobs_response.t, [> Error.t ]) result task
+          (** [order_by] is one of ["name"], ["name desc"], ["create_time"],
             ["create_time desc"]. *)
 
-        val delete :
-          ?project_id:string ->
-          location:string ->
-          ?reason:string ->
-          ?request_id:string ->
-          job:string ->
-          unit ->
-          (Operation.t, [> Error.t ]) result Lwt.t
-        (** Delete a job. Returns a long-running operation; see
+          val delete :
+            ?project_id:string ->
+            location:string ->
+            ?reason:string ->
+            ?request_id:string ->
+            job:string ->
+            unit ->
+            (Operation.t, [> Error.t ]) result task
+          (** Delete a job. Returns a long-running operation; see
             {!Operations.get}. *)
 
-        val cancel :
-          ?project_id:string ->
-          location:string ->
-          ?request_id:string ->
-          job:string ->
-          unit ->
-          (Operation.t, [> Error.t ]) result Lwt.t
+          val cancel :
+            ?project_id:string ->
+            location:string ->
+            ?request_id:string ->
+            job:string ->
+            unit ->
+            (Operation.t, [> Error.t ]) result task
 
-        val poll_until_complete :
-          ?project_id:string ->
-          location:string ->
-          ?poll_every_s:float ->
-          ?timeout_s:float ->
-          job:string ->
-          unit ->
-          (Job.t, [> Error.t ]) result Lwt.t
-        (** Poll {!get} every [poll_every_s] seconds (default 10) until the job
+          val poll_until_complete :
+            ?project_id:string ->
+            location:string ->
+            ?poll_every_s:float ->
+            ?timeout_s:float ->
+            job:string ->
+            unit ->
+            (Job.t, [> Error.t ]) result task
+          (** Poll {!get} every [poll_every_s] seconds (default 10) until the job
             reaches a terminal state ({!Job_state.is_terminal}) and return it.
             Fails with [`Gcloud_retry_timeout] once [timeout_s] elapses; waits
             indefinitely when [timeout_s] is omitted. Whether the job succeeded
             is left to the caller: check {!Job.state}. *)
 
-        module TaskGroups : sig
-          module Tasks : sig
-            val get :
-              ?project_id:string ->
-              location:string ->
-              job:string ->
-              ?task_group:string ->
-              task:string ->
-              unit ->
-              (Task.t, [> Error.t ]) result Lwt.t
-            (** [task_group] defaults to ["group0"]; [task] is the task index,
+          module TaskGroups : sig
+            module Tasks : sig
+              val get :
+                ?project_id:string ->
+                location:string ->
+                job:string ->
+                ?task_group:string ->
+                task:string ->
+                unit ->
+                (Task.t, [> Error.t ]) result task
+              (** [task_group] defaults to ["group0"]; [task] is the task index,
                 e.g. ["0"]. *)
 
-            val list :
-              ?project_id:string ->
-              location:string ->
-              job:string ->
-              ?task_group:string ->
-              ?filter:string ->
-              ?page_size:int ->
-              ?page_token:string ->
-              unit ->
-              (List_tasks_response.t, [> Error.t ]) result Lwt.t
-            (** [filter] is of the form ["State=RUNNING"]. *)
+              val list :
+                ?project_id:string ->
+                location:string ->
+                job:string ->
+                ?task_group:string ->
+                ?filter:string ->
+                ?page_size:int ->
+                ?page_token:string ->
+                unit ->
+                (List_tasks_response.t, [> Error.t ]) result task
+              (** [filter] is of the form ["State=RUNNING"]. *)
+            end
           end
         end
-      end
 
-      module Operations : sig
-        val get :
-          name:string -> unit -> (Operation.t, [> Error.t ]) result Lwt.t
-        (** [name] is the full operation name as returned in {!Operation.name}. *)
+        module Operations : sig
+          val get :
+            name:string -> unit -> (Operation.t, [> Error.t ]) result task
+          (** [name] is the full operation name as returned in {!Operation.name}. *)
 
-        val list :
-          ?project_id:string ->
-          location:string ->
-          ?filter:string ->
-          ?page_size:int ->
-          ?page_token:string ->
-          unit ->
-          (List_operations_response.t, [> Error.t ]) result Lwt.t
+          val list :
+            ?project_id:string ->
+            location:string ->
+            ?filter:string ->
+            ?page_size:int ->
+            ?page_token:string ->
+            unit ->
+            (List_operations_response.t, [> Error.t ]) result task
 
-        val cancel : name:string -> unit -> (unit, [> Error.t ]) result Lwt.t
-        val delete : name:string -> unit -> (unit, [> Error.t ]) result Lwt.t
+          val cancel : name:string -> unit -> (unit, [> Error.t ]) result task
+          val delete : name:string -> unit -> (unit, [> Error.t ]) result task
+        end
       end
     end
   end
@@ -713,157 +719,163 @@ module V1alpha : sig
 
       Same conventions as {!V1.Projects}. *)
 
-  module Projects : sig
-    module Locations : sig
-      module Jobs : sig
-        val create :
-          ?project_id:string ->
-          location:string ->
-          ?job_id:string ->
-          ?request_id:string ->
-          Job.t ->
-          (Job.t, [> Error.t ]) result Lwt.t
+  module Make
+      (Async : Async_task_sig.S)
+      (_ : Client_sig.S with type 'a task = 'a Async.t) : sig
+    type 'a task = 'a Async.t
 
-        val get :
-          ?project_id:string ->
-          location:string ->
-          job:string ->
-          unit ->
-          (Job.t, [> Error.t ]) result Lwt.t
+    module Projects : sig
+      module Locations : sig
+        module Jobs : sig
+          val create :
+            ?project_id:string ->
+            location:string ->
+            ?job_id:string ->
+            ?request_id:string ->
+            Job.t ->
+            (Job.t, [> Error.t ]) result task
 
-        val list :
-          ?project_id:string ->
-          location:string ->
-          ?filter:string ->
-          ?order_by:string ->
-          ?page_size:int ->
-          ?page_token:string ->
-          unit ->
-          (List_jobs_response.t, [> Error.t ]) result Lwt.t
+          val get :
+            ?project_id:string ->
+            location:string ->
+            job:string ->
+            unit ->
+            (Job.t, [> Error.t ]) result task
 
-        val delete :
-          ?project_id:string ->
-          location:string ->
-          ?reason:string ->
-          ?request_id:string ->
-          job:string ->
-          unit ->
-          (Operation.t, [> Error.t ]) result Lwt.t
+          val list :
+            ?project_id:string ->
+            location:string ->
+            ?filter:string ->
+            ?order_by:string ->
+            ?page_size:int ->
+            ?page_token:string ->
+            unit ->
+            (List_jobs_response.t, [> Error.t ]) result task
 
-        val cancel :
-          ?project_id:string ->
-          location:string ->
-          ?request_id:string ->
-          job:string ->
-          unit ->
-          (Operation.t, [> Error.t ]) result Lwt.t
+          val delete :
+            ?project_id:string ->
+            location:string ->
+            ?reason:string ->
+            ?request_id:string ->
+            job:string ->
+            unit ->
+            (Operation.t, [> Error.t ]) result task
 
-        val patch :
-          ?project_id:string ->
-          location:string ->
-          ?request_id:string ->
-          update_mask:string ->
-          job:string ->
-          Job.t ->
-          (Job.t, [> Error.t ]) result Lwt.t
-        (** Update a queued, scheduled or running job. Currently only
+          val cancel :
+            ?project_id:string ->
+            location:string ->
+            ?request_id:string ->
+            job:string ->
+            unit ->
+            (Operation.t, [> Error.t ]) result task
+
+          val patch :
+            ?project_id:string ->
+            location:string ->
+            ?request_id:string ->
+            update_mask:string ->
+            job:string ->
+            Job.t ->
+            (Job.t, [> Error.t ]) result task
+          (** Update a queued, scheduled or running job. Currently only
             increasing the first task group's [task_count] is supported, so
             [update_mask] must be ["taskGroups[0].taskCount"] (or
             ["task_groups[0].task_count"]). *)
 
-        val poll_until_complete :
-          ?project_id:string ->
-          location:string ->
-          ?poll_every_s:float ->
-          ?timeout_s:float ->
-          job:string ->
-          unit ->
-          (Job.t, [> Error.t ]) result Lwt.t
+          val poll_until_complete :
+            ?project_id:string ->
+            location:string ->
+            ?poll_every_s:float ->
+            ?timeout_s:float ->
+            job:string ->
+            unit ->
+            (Job.t, [> Error.t ]) result task
 
-        module TaskGroups : sig
-          module Tasks : sig
-            val get :
-              ?project_id:string ->
-              location:string ->
-              job:string ->
-              ?task_group:string ->
-              task:string ->
-              unit ->
-              (Task.t, [> Error.t ]) result Lwt.t
+          module TaskGroups : sig
+            module Tasks : sig
+              val get :
+                ?project_id:string ->
+                location:string ->
+                job:string ->
+                ?task_group:string ->
+                task:string ->
+                unit ->
+                (Task.t, [> Error.t ]) result task
 
-            val list :
-              ?project_id:string ->
-              location:string ->
-              job:string ->
-              ?task_group:string ->
-              ?filter:string ->
-              ?order_by:string ->
-              ?page_size:int ->
-              ?page_token:string ->
-              unit ->
-              (List_tasks_response.t, [> Error.t ]) result Lwt.t
+              val list :
+                ?project_id:string ->
+                location:string ->
+                job:string ->
+                ?task_group:string ->
+                ?filter:string ->
+                ?order_by:string ->
+                ?page_size:int ->
+                ?page_token:string ->
+                unit ->
+                (List_tasks_response.t, [> Error.t ]) result task
+            end
           end
         end
-      end
 
-      module Operations : sig
-        val get :
-          name:string -> unit -> (Operation.t, [> Error.t ]) result Lwt.t
+        module Operations : sig
+          val get :
+            name:string -> unit -> (Operation.t, [> Error.t ]) result task
 
-        val list :
-          ?project_id:string ->
-          location:string ->
-          ?filter:string ->
-          ?page_size:int ->
-          ?page_token:string ->
-          unit ->
-          (List_operations_response.t, [> Error.t ]) result Lwt.t
+          val list :
+            ?project_id:string ->
+            location:string ->
+            ?filter:string ->
+            ?page_size:int ->
+            ?page_token:string ->
+            unit ->
+            (List_operations_response.t, [> Error.t ]) result task
 
-        val cancel : name:string -> unit -> (unit, [> Error.t ]) result Lwt.t
-        val delete : name:string -> unit -> (unit, [> Error.t ]) result Lwt.t
-      end
+          val cancel : name:string -> unit -> (unit, [> Error.t ]) result task
+          val delete : name:string -> unit -> (unit, [> Error.t ]) result task
+        end
 
-      module ResourceAllowances : sig
-        val create :
-          ?project_id:string ->
-          location:string ->
-          ?resource_allowance_id:string ->
-          ?request_id:string ->
-          Resource_allowance.t ->
-          (Resource_allowance.t, [> Error.t ]) result Lwt.t
+        module ResourceAllowances : sig
+          val create :
+            ?project_id:string ->
+            location:string ->
+            ?resource_allowance_id:string ->
+            ?request_id:string ->
+            Resource_allowance.t ->
+            (Resource_allowance.t, [> Error.t ]) result task
 
-        val get :
-          ?project_id:string ->
-          location:string ->
-          resource_allowance:string ->
-          unit ->
-          (Resource_allowance.t, [> Error.t ]) result Lwt.t
+          val get :
+            ?project_id:string ->
+            location:string ->
+            resource_allowance:string ->
+            unit ->
+            (Resource_allowance.t, [> Error.t ]) result task
 
-        val list :
-          ?project_id:string ->
-          location:string ->
-          ?page_size:int ->
-          ?page_token:string ->
-          unit ->
-          (List_resource_allowances_response.t, [> Error.t ]) result Lwt.t
+          val list :
+            ?project_id:string ->
+            location:string ->
+            ?page_size:int ->
+            ?page_token:string ->
+            unit ->
+            (List_resource_allowances_response.t, [> Error.t ]) result task
 
-        val delete :
-          ?project_id:string ->
-          location:string ->
-          ?reason:string ->
-          ?request_id:string ->
-          resource_allowance:string ->
-          unit ->
-          (Operation.t, [> Error.t ]) result Lwt.t
+          val delete :
+            ?project_id:string ->
+            location:string ->
+            ?reason:string ->
+            ?request_id:string ->
+            resource_allowance:string ->
+            unit ->
+            (Operation.t, [> Error.t ]) result task
 
-        val patch :
-          ?project_id:string ->
-          location:string ->
-          ?request_id:string ->
-          update_mask:string ->
-          resource_allowance:string ->
-          Resource_allowance.t ->
-          (Resource_allowance.t, [> Error.t ]) result Lwt.t
+          val patch :
+            ?project_id:string ->
+            location:string ->
+            ?request_id:string ->
+            update_mask:string ->
+            resource_allowance:string ->
+            Resource_allowance.t ->
+            (Resource_allowance.t, [> Error.t ]) result task
+        end
       end
     end
   end

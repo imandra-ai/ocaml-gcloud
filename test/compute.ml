@@ -7,7 +7,7 @@ let tests : unit Alcotest_lwt.test_case list =
     (*     (\* gcloud compute firewall-rules create dave-strikes-back --source-tags=gke-try-imandra-dev-cluster-pool-2-d618ee36-p7wt --allow=tcp:32125 --source-ranges=0.0.0.0/0 *\) *)
 
     (*     let rule = *)
-    (*       let open Gcloud.Compute.FirewallRules in *)
+    (*       let open Gcloud_lwt.Compute.FirewallRules in *)
     (*       { name = "ocaml-gcloud-test-rule" *)
     (*       ; source_tags = ["gke-try-imandra-dev-cluster-pool-2-d618ee36-p7wt"] *)
     (*       ; source_ranges = ["0.0.0.0/0"] *)
@@ -22,7 +22,7 @@ let tests : unit Alcotest_lwt.test_case list =
 
     (*     in *)
 
-    (*     Gcloud.Compute.FirewallRules.insert *)
+    (*     Gcloud_lwt.Compute.FirewallRules.insert *)
     (*       ~project:"imandra-dev" ~rule *)
 
     (*     >>= function *)
@@ -31,15 +31,15 @@ let tests : unit Alcotest_lwt.test_case list =
     (*       Lwt_unix.sleep 10.0 >>= fun () -> *)
     (*       begin *)
 
-    (*         Gcloud.Compute.FirewallRules.delete *)
+    (*         Gcloud_lwt.Compute.FirewallRules.delete *)
     (*           ~project:"imandra-dev" ~name:"ocaml-gcloud-test-rule" >>= function *)
     (*         | Ok _ -> *)
     (*           Alcotest.(check string) "correct name" "ok" "ok" |> Lwt.return *)
 
     (*         | Error e -> *)
-    (*           Alcotest.failf "Error:\n%a" Gcloud.Error.pp e *)
+    (*           Alcotest.failf "Error:\n%a" Gcloud_lwt.Error.pp e *)
     (*       end *)
 
     (*     | Error e -> *)
-    (*       Alcotest.failf "Error:\n%a" Gcloud.Error.pp e *)
+    (*       Alcotest.failf "Error:\n%a" Gcloud_lwt.Error.pp e *)
     (*  ) *) ]

@@ -1,0 +1,20 @@
+(library
+ (name gcloud_lwt)
+ (public_name gcloud-lwt)
+ (libraries
+  gcloud
+  cohttp
+  cohttp-lwt
+  cohttp-lwt-unix
+  containers
+  cstruct
+  jose
+  logs
+  logs.lwt
+  lwt
+  lwt.unix
+  ptime
+  ptime.clock.os
+  uri
+  x509
+  yojson))

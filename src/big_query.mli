@@ -40,14 +40,6 @@ module Schema : sig
 end
 
 module Datasets : sig
-  val get :
-    ?project_id:string ->
-    dataset_id:string ->
-    unit ->
-    (string, [> Error.t ]) Lwt_result.t
-
-  val list : ?project_id:string -> unit -> (string, [> Error.t ]) Lwt_result.t
-
   module Tables : sig
     type table = {
       id : string;
@@ -64,14 +56,6 @@ module Datasets : sig
       nextPageToken : string option;
       totalItems : int;
     }
-
-    val list :
-      ?project_id:string ->
-      ?max_results:int ->
-      ?page_token:string ->
-      dataset_id:string ->
-      unit ->
-      (resp, [> Error.t ]) Lwt_result.t
   end
 end
 
@@ -160,23 +144,6 @@ module Jobs : sig
 
   val query_response_to_yojson : query_response -> Yojson.Safe.t
 
-  val query :
-    ?project_id:string ->
-    ?dry_run:bool ->
-    ?use_legacy_sql:bool ->
-    ?params:Param.query_parameter list ->
-    ?location:string ->
-    ?use_int64_timestamp:bool ->
-    ?max_results:int ->
-    string ->
-    (query_response, [> Error.t ]) Lwt_result.t
-
-  val get_query_results :
-    ?page_token:string ->
-    ?use_int64_timestamp:bool ->
-    job_reference ->
-    (query_response, [> Error.t ]) Lwt_result.t
-
   type query_response_complete = {
     kind : string;
     job_reference : job_reference;
@@ -186,16 +153,6 @@ module Jobs : sig
 
   val query_response_complete_to_yojson :
     query_response_complete -> Yojson.Safe.t
-
-  val poll_until_complete :
-    ?poll_every_s:float ->
-    ?attempts:int ->
-    query_response ->
-    (query_response_complete, [> Error.t ]) result Lwt.t
-
-  val fetch_all_rows :
-    query_response_complete ->
-    (query_response_complete, [> Error.t ]) Lwt_result.t
 
   type ('a, 'b) decoder = 'a -> ('b, string) result
   type 'a data_decoder = (query_response_data, 'a) decoder
@@ -212,4 +169,75 @@ module Jobs : sig
   val float : float value_decoder
   val nullable : 'a value_decoder -> 'a option value_decoder
   val list : 'a value_decoder -> 'a list value_decoder
+end
+
+module Make
+    (Async : Async_task_sig.S)
+    (_ : Client_sig.S with type 'a task = 'a Async.t) : sig
+  type 'a task = 'a Async.t
+
+  module Scopes : module type of struct
+    include Scopes
+  end
+
+  module Schema : module type of struct
+    include Schema
+  end
+
+  module Datasets : sig
+    val get :
+      ?project_id:string ->
+      dataset_id:string ->
+      unit ->
+      (string, [> Error.t ]) result task
+
+    val list : ?project_id:string -> unit -> (string, [> Error.t ]) result task
+
+    module Tables : sig
+      include module type of struct
+        include Datasets.Tables
+      end
+
+      val list :
+        ?project_id:string ->
+        ?max_results:int ->
+        ?page_token:string ->
+        dataset_id:string ->
+        unit ->
+        (resp, [> Error.t ]) result task
+    end
+  end
+
+  module Jobs : sig
+    include module type of struct
+      include Jobs
+    end
+
+    val query :
+      ?project_id:string ->
+      ?dry_run:bool ->
+      ?use_legacy_sql:bool ->
+      ?params:Param.query_parameter list ->
+      ?location:string ->
+      ?use_int64_timestamp:bool ->
+      ?max_results:int ->
+      string ->
+      (query_response, [> Error.t ]) result task
+
+    val get_query_results :
+      ?page_token:string ->
+      ?use_int64_timestamp:bool ->
+      job_reference ->
+      (query_response, [> Error.t ]) result task
+
+    val poll_until_complete :
+      ?poll_every_s:float ->
+      ?attempts:int ->
+      query_response ->
+      (query_response_complete, [> Error.t ]) result task
+
+    val fetch_all_rows :
+      query_response_complete ->
+      (query_response_complete, [> Error.t ]) result task
+  end
 end

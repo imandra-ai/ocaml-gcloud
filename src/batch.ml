@@ -2,11 +2,6 @@
 
     https://cloud.google.com/batch/docs/reference/rest *)
 
-let ok = Lwt_result.ok
-let src = Logs.Src.create "gcloud.batch"
-
-module Log = (val Logs_lwt.src_log src : Logs_lwt.LOG)
-
 module Scopes = struct
   let cloud_platform = "https://www.googleapis.com/auth/cloud-platform"
 end
@@ -19,56 +14,51 @@ let query_opt (name : string) (value : string option) :
     (string * string list) list =
   value |> CCOption.map_or ~default:[] (fun v -> [ (name, [ v ]) ])
 
-let call_with_token ~(token_info : Auth.token_info) ~(meth : Cohttp.Code.meth)
-    ?(query = []) ?(body : Yojson.Safe.t option) ~(path : string)
-    (parse : Yojson.Safe.t -> ('a, string) result) :
-    ('a, [> Error.t ]) result Lwt.t =
-  let open Lwt_result.Infix in
-  Lwt.catch
-    (fun () ->
-      let uri = Uri.make () ~scheme:"https" ~host ~path ~query in
-      let headers =
-        Cohttp.Header.of_list
-          (( "Authorization",
-             Printf.sprintf "Bearer %s" token_info.Auth.token.access_token )
-          ::
-          (match body with
-          | Some _ -> [ ("Content-Type", "application/json") ]
-          | None -> []))
-      in
-      let body =
-        body
-        |> CCOption.map (fun j ->
-               j |> Yojson.Safe.to_string |> Cohttp_lwt.Body.of_string)
-      in
-      Log.debug (fun m ->
-          m "%s %a" (Cohttp.Code.string_of_method meth) Uri.pp_hum uri)
-      |> ok
-      >>= fun () ->
-      let open Lwt.Infix in
-      Cohttp_lwt_unix.Client.call meth ?body ~headers uri
-      >>= Util.consume_body |> ok)
-    (fun e -> Lwt_result.fail (`Network_error e))
-  >>= fun (resp, body) ->
-  match Cohttp.Response.status resp with
-  | `OK -> Error.parse_body_json parse body |> Lwt.return
-  | status_code -> Error.of_response_status_code_and_body status_code body
+module Plumbing
+    (Async : Async_task_sig.S)
+    (Client : Client_sig.S with type 'a task = 'a Async.t) =
+struct
+  module R = Async_task_result.Make (Async)
+  module Req = Request.Make (Async) (Client)
 
-(** Call an endpoint addressed by a full resource name (no project lookup). *)
-let call ~meth ?query ?body ~path parse =
-  let open Lwt_result.Infix in
-  Common.get_access_token ~scopes:[ Scopes.cloud_platform ] ()
-  >>= fun token_info ->
-  call_with_token ~token_info ~meth ?query ?body ~path parse
+  let call_with_token ~(token_info : Auth.token_info) ~(meth : Cohttp.Code.meth)
+      ?(query = []) ?(body : Yojson.Safe.t option) ~(path : string)
+      (parse : Yojson.Safe.t -> ('a, string) result) :
+      ('a, [> Error.t ]) result Async.t =
+    let open R.Infix in
+    let uri = Uri.make () ~scheme:"https" ~host ~path ~query in
+    let headers =
+      Cohttp.Header.of_list
+        (Req.bearer token_info
+        ::
+        (match body with
+        | Some _ -> [ ("Content-Type", "application/json") ]
+        | None -> []))
+    in
+    let body = CCOption.map Yojson.Safe.to_string body in
+    Req.call ~meth ~headers ?body uri >>= fun (status, body) ->
+    match status with
+    | `OK -> R.lift (Error.parse_body_json parse body)
+    | status_code ->
+        R.lift (Error.of_response_status_code_and_body status_code body)
 
-(** Call an endpoint whose path depends on the resolved project ID. *)
-let call_in_project ?project_id ~meth ?query ?body
-    ~(path : project_id:string -> string) parse =
-  let open Lwt_result.Infix in
-  Common.get_access_token ~scopes:[ Scopes.cloud_platform ] ()
-  >>= fun token_info ->
-  Common.get_project_id ?project_id ~token_info () >>= fun project_id ->
-  call_with_token ~token_info ~meth ?query ?body ~path:(path ~project_id) parse
+  (** Call an endpoint addressed by a full resource name (no project lookup). *)
+  let call ~meth ?query ?body ~path parse =
+    let open R.Infix in
+    Client.get_access_token ~scopes:[ Scopes.cloud_platform ] ()
+    >>= fun token_info ->
+    call_with_token ~token_info ~meth ?query ?body ~path parse
+
+  (** Call an endpoint whose path depends on the resolved project ID. *)
+  let call_in_project ?project_id ~meth ?query ?body
+      ~(path : project_id:string -> string) parse =
+    let open R.Infix in
+    Client.get_access_token ~scopes:[ Scopes.cloud_platform ] ()
+    >>= fun token_info ->
+    Client.get_project_id ?project_id ~token_info () >>= fun project_id ->
+    call_with_token ~token_info ~meth ?query ?body ~path:(path ~project_id)
+      parse
+end
 
 (* {1 API methods shared between versions} *)
 
@@ -102,13 +92,19 @@ module type VERSION = sig
   end
 end
 
-module Make_api (X : VERSION) = struct
+module Make_api
+    (Async : Async_task_sig.S)
+    (Client : Client_sig.S with type 'a task = 'a Async.t)
+    (X : VERSION) =
+struct
+  include Plumbing (Async) (Client)
+
   let path ~project_id ~location =
     Printf.sprintf "%s/projects/%s/locations/%s" X.version project_id location
 
   module Jobs = struct
     let create ?project_id ~location ?job_id ?request_id (job : X.Job.t) :
-        (X.Job.t, [> Error.t ]) result Lwt.t =
+        (X.Job.t, [> Error.t ]) result Async.t =
       let query =
         List.concat
           [ query_opt "jobId" job_id; query_opt "requestId" request_id ]
@@ -117,15 +113,15 @@ module Make_api (X : VERSION) = struct
         ~path:(fun ~project_id -> path ~project_id ~location ^ "/jobs")
         X.Job.of_yojson
 
-    let get ?project_id ~location ~job () : (X.Job.t, [> Error.t ]) result Lwt.t
-        =
+    let get ?project_id ~location ~job () :
+        (X.Job.t, [> Error.t ]) result Async.t =
       call_in_project ?project_id ~meth:`GET
         ~path:(fun ~project_id ->
           Printf.sprintf "%s/jobs/%s" (path ~project_id ~location) job)
         X.Job.of_yojson
 
     let list ?project_id ~location ?filter ?order_by ?page_size ?page_token () :
-        (X.List_jobs_response.t, [> Error.t ]) result Lwt.t =
+        (X.List_jobs_response.t, [> Error.t ]) result Async.t =
       let query =
         List.concat
           [
@@ -140,7 +136,7 @@ module Make_api (X : VERSION) = struct
         X.List_jobs_response.of_yojson
 
     let delete ?project_id ~location ?reason ?request_id ~job () :
-        (Batch_types.Operation.t, [> Error.t ]) result Lwt.t =
+        (Batch_types.Operation.t, [> Error.t ]) result Async.t =
       let query =
         List.concat
           [ query_opt "reason" reason; query_opt "requestId" request_id ]
@@ -151,7 +147,7 @@ module Make_api (X : VERSION) = struct
         Batch_types.Operation.of_yojson
 
     let cancel ?project_id ~location ?request_id ~job () :
-        (Batch_types.Operation.t, [> Error.t ]) result Lwt.t =
+        (Batch_types.Operation.t, [> Error.t ]) result Async.t =
       let body =
         `Assoc
           (request_id
@@ -164,19 +160,19 @@ module Make_api (X : VERSION) = struct
         Batch_types.Operation.of_yojson
 
     let poll_until_complete ?project_id ~location ?(poll_every_s = 10.)
-        ?timeout_s ~job () : (X.Job.t, [> Error.t ]) result Lwt.t =
-      let open Lwt_result.Infix in
+        ?timeout_s ~job () : (X.Job.t, [> Error.t ]) result Async.t =
+      let open R.Infix in
       let deadline =
         timeout_s |> CCOption.map (fun t -> Unix.gettimeofday () +. t)
       in
       let rec loop () =
         get ?project_id ~location ~job () >>= fun j ->
         let state = X.Job.state j in
-        if Batch_types.Job_state.is_terminal state then Lwt_result.return j
+        if Batch_types.Job_state.is_terminal state then R.return j
         else
           match deadline with
           | Some d when Unix.gettimeofday () >= d ->
-              Lwt_result.fail
+              R.fail
                 (`Gcloud_retry_timeout
                   (Printf.sprintf
                      "Batch.%s.Projects.Locations.Jobs.poll_until_complete: \
@@ -184,14 +180,14 @@ module Make_api (X : VERSION) = struct
                      X.version job
                      (Batch_types.Job_state.show state)
                      (CCOption.get_or ~default:0. timeout_s)))
-          | _ -> Lwt_unix.sleep poll_every_s |> ok >>= loop
+          | _ -> R.ok (Async.sleep poll_every_s) >>= loop
       in
       loop ()
   end
 
   module Tasks = struct
     let get ?project_id ~location ~job ?(task_group = "group0") ~task () :
-        (X.Task.t, [> Error.t ]) result Lwt.t =
+        (X.Task.t, [> Error.t ]) result Async.t =
       call_in_project ?project_id ~meth:`GET
         ~path:(fun ~project_id ->
           Printf.sprintf "%s/jobs/%s/taskGroups/%s/tasks/%s"
@@ -201,7 +197,7 @@ module Make_api (X : VERSION) = struct
 
     let list ?project_id ~location ~job ?(task_group = "group0") ?filter
         ?order_by ?page_size ?page_token () :
-        (X.List_tasks_response.t, [> Error.t ]) result Lwt.t =
+        (X.List_tasks_response.t, [> Error.t ]) result Async.t =
       let query =
         List.concat
           [
@@ -220,13 +216,13 @@ module Make_api (X : VERSION) = struct
   end
 
   module Operations = struct
-    let get ~name () : (Batch_types.Operation.t, [> Error.t ]) result Lwt.t =
+    let get ~name () : (Batch_types.Operation.t, [> Error.t ]) result Async.t =
       call ~meth:`GET
         ~path:(Printf.sprintf "%s/%s" X.version name)
         Batch_types.Operation.of_yojson
 
     let list ?project_id ~location ?filter ?page_size ?page_token () :
-        (Batch_types.List_operations_response.t, [> Error.t ]) result Lwt.t =
+        (Batch_types.List_operations_response.t, [> Error.t ]) result Async.t =
       let query =
         List.concat
           [
@@ -239,11 +235,11 @@ module Make_api (X : VERSION) = struct
         ~path:(fun ~project_id -> path ~project_id ~location ^ "/operations")
         Batch_types.List_operations_response.of_yojson
 
-    let cancel ~name () : (unit, [> Error.t ]) result Lwt.t =
+    let cancel ~name () : (unit, [> Error.t ]) result Async.t =
       call ~meth:`POST ~body:(`Assoc [])
         ~path:(Printf.sprintf "%s/%s:cancel" X.version name) (fun _ -> Ok ())
 
-    let delete ~name () : (unit, [> Error.t ]) result Lwt.t =
+    let delete ~name () : (unit, [> Error.t ]) result Async.t =
       call ~meth:`DELETE ~path:(Printf.sprintf "%s/%s" X.version name) (fun _ ->
           Ok ())
   end
@@ -432,34 +428,43 @@ module V1 = struct
 
   [@@@warning "+39"]
 
-  module Projects = struct
-    module Locations = struct
-      module Api = Make_api (struct
-        let version = "v1"
+  module Make
+      (Async : Async_task_sig.S)
+      (Client : Client_sig.S with type 'a task = 'a Async.t) =
+  struct
+    type 'a task = 'a Async.t
 
-        module Job = Job
-        module Task = Task
-        module List_jobs_response = List_jobs_response
-        module List_tasks_response = List_tasks_response
-      end)
+    module Projects = struct
+      module Locations = struct
+        module Api =
+          Make_api (Async) (Client)
+            (struct
+              let version = "v1"
 
-      module Jobs = struct
-        include Api.Jobs
+              module Job = Job
+              module Task = Task
+              module List_jobs_response = List_jobs_response
+              module List_tasks_response = List_tasks_response
+            end)
 
-        module TaskGroups = struct
-          module Tasks = struct
-            let get = Api.Tasks.get
+        module Jobs = struct
+          include Api.Jobs
 
-            (* [orderBy] is only supported by v1alpha. *)
-            let list ?project_id ~location ~job ?task_group ?filter ?page_size
-                ?page_token () =
-              Api.Tasks.list ?project_id ~location ~job ?task_group ?filter
-                ?page_size ?page_token ()
+          module TaskGroups = struct
+            module Tasks = struct
+              let get = Api.Tasks.get
+
+              (* [orderBy] is only supported by v1alpha. *)
+              let list ?project_id ~location ~job ?task_group ?filter ?page_size
+                  ?page_token () =
+                Api.Tasks.list ?project_id ~location ~job ?task_group ?filter
+                  ?page_size ?page_token ()
+            end
           end
         end
-      end
 
-      module Operations = Api.Operations
+        module Operations = Api.Operations
+      end
     end
   end
 end
@@ -885,112 +890,123 @@ module V1alpha = struct
 
   [@@@warning "+39"]
 
-  module Projects = struct
-    module Locations = struct
-      module Api = Make_api (struct
-        let version = "v1alpha"
+  module Make
+      (Async : Async_task_sig.S)
+      (Client : Client_sig.S with type 'a task = 'a Async.t) =
+  struct
+    type 'a task = 'a Async.t
 
-        module Job = Job
-        module Task = Task
-        module List_jobs_response = List_jobs_response
-        module List_tasks_response = List_tasks_response
-      end)
+    module Projects = struct
+      module Locations = struct
+        module Api =
+          Make_api (Async) (Client)
+            (struct
+              let version = "v1alpha"
 
-      module Jobs = struct
-        include Api.Jobs
+              module Job = Job
+              module Task = Task
+              module List_jobs_response = List_jobs_response
+              module List_tasks_response = List_tasks_response
+            end)
 
-        let patch ?project_id ~location ?request_id ~update_mask ~job
-            (body : Job.t) : (Job.t, [> Error.t ]) result Lwt.t =
-          let query =
-            List.concat
-              [
-                [ ("updateMask", [ update_mask ]) ];
-                query_opt "requestId" request_id;
-              ]
-          in
-          call_in_project ?project_id ~meth:`PATCH ~query
-            ~body:(Job.to_yojson body)
-            ~path:(fun ~project_id ->
-              Printf.sprintf "%s/jobs/%s" (Api.path ~project_id ~location) job)
-            Job.of_yojson
+        module Jobs = struct
+          include Api.Jobs
 
-        module TaskGroups = struct
-          module Tasks = Api.Tasks
+          let patch ?project_id ~location ?request_id ~update_mask ~job
+              (body : Job.t) : (Job.t, [> Error.t ]) result Async.t =
+            let query =
+              List.concat
+                [
+                  [ ("updateMask", [ update_mask ]) ];
+                  query_opt "requestId" request_id;
+                ]
+            in
+            Api.call_in_project ?project_id ~meth:`PATCH ~query
+              ~body:(Job.to_yojson body)
+              ~path:(fun ~project_id ->
+                Printf.sprintf "%s/jobs/%s" (Api.path ~project_id ~location) job)
+              Job.of_yojson
+
+          module TaskGroups = struct
+            module Tasks = Api.Tasks
+          end
         end
-      end
 
-      module Operations = Api.Operations
+        module Operations = Api.Operations
 
-      module ResourceAllowances = struct
-        let create ?project_id ~location ?resource_allowance_id ?request_id
-            (resource_allowance : Resource_allowance.t) :
-            (Resource_allowance.t, [> Error.t ]) result Lwt.t =
-          let query =
-            List.concat
-              [
-                query_opt "resourceAllowanceId" resource_allowance_id;
-                query_opt "requestId" request_id;
-              ]
-          in
-          call_in_project ?project_id ~meth:`POST ~query
-            ~body:(Resource_allowance.to_yojson resource_allowance)
-            ~path:(fun ~project_id ->
-              Api.path ~project_id ~location ^ "/resourceAllowances")
-            Resource_allowance.of_yojson
+        module ResourceAllowances = struct
+          let create ?project_id ~location ?resource_allowance_id ?request_id
+              (resource_allowance : Resource_allowance.t) :
+              (Resource_allowance.t, [> Error.t ]) result Async.t =
+            let query =
+              List.concat
+                [
+                  query_opt "resourceAllowanceId" resource_allowance_id;
+                  query_opt "requestId" request_id;
+                ]
+            in
+            Api.call_in_project ?project_id ~meth:`POST ~query
+              ~body:(Resource_allowance.to_yojson resource_allowance)
+              ~path:(fun ~project_id ->
+                Api.path ~project_id ~location ^ "/resourceAllowances")
+              Resource_allowance.of_yojson
 
-        let get ?project_id ~location ~resource_allowance () :
-            (Resource_allowance.t, [> Error.t ]) result Lwt.t =
-          call_in_project ?project_id ~meth:`GET
-            ~path:(fun ~project_id ->
-              Printf.sprintf "%s/resourceAllowances/%s"
-                (Api.path ~project_id ~location)
-                resource_allowance)
-            Resource_allowance.of_yojson
+          let get ?project_id ~location ~resource_allowance () :
+              (Resource_allowance.t, [> Error.t ]) result Async.t =
+            Api.call_in_project ?project_id ~meth:`GET
+              ~path:(fun ~project_id ->
+                Printf.sprintf "%s/resourceAllowances/%s"
+                  (Api.path ~project_id ~location)
+                  resource_allowance)
+              Resource_allowance.of_yojson
 
-        let list ?project_id ~location ?page_size ?page_token () :
-            (List_resource_allowances_response.t, [> Error.t ]) result Lwt.t =
-          let query =
-            List.concat
-              [
-                query_opt "pageSize" (CCOption.map string_of_int page_size);
-                query_opt "pageToken" page_token;
-              ]
-          in
-          call_in_project ?project_id ~meth:`GET ~query
-            ~path:(fun ~project_id ->
-              Api.path ~project_id ~location ^ "/resourceAllowances")
-            List_resource_allowances_response.of_yojson
+          let list ?project_id ~location ?page_size ?page_token () :
+              (List_resource_allowances_response.t, [> Error.t ]) result Async.t
+              =
+            let query =
+              List.concat
+                [
+                  query_opt "pageSize" (CCOption.map string_of_int page_size);
+                  query_opt "pageToken" page_token;
+                ]
+            in
+            Api.call_in_project ?project_id ~meth:`GET ~query
+              ~path:(fun ~project_id ->
+                Api.path ~project_id ~location ^ "/resourceAllowances")
+              List_resource_allowances_response.of_yojson
 
-        let delete ?project_id ~location ?reason ?request_id ~resource_allowance
-            () : (Operation.t, [> Error.t ]) result Lwt.t =
-          let query =
-            List.concat
-              [ query_opt "reason" reason; query_opt "requestId" request_id ]
-          in
-          call_in_project ?project_id ~meth:`DELETE ~query
-            ~path:(fun ~project_id ->
-              Printf.sprintf "%s/resourceAllowances/%s"
-                (Api.path ~project_id ~location)
-                resource_allowance)
-            Operation.of_yojson
+          let delete ?project_id ~location ?reason ?request_id
+              ~resource_allowance () :
+              (Operation.t, [> Error.t ]) result Async.t =
+            let query =
+              List.concat
+                [ query_opt "reason" reason; query_opt "requestId" request_id ]
+            in
+            Api.call_in_project ?project_id ~meth:`DELETE ~query
+              ~path:(fun ~project_id ->
+                Printf.sprintf "%s/resourceAllowances/%s"
+                  (Api.path ~project_id ~location)
+                  resource_allowance)
+              Operation.of_yojson
 
-        let patch ?project_id ~location ?request_id ~update_mask
-            ~resource_allowance (body : Resource_allowance.t) :
-            (Resource_allowance.t, [> Error.t ]) result Lwt.t =
-          let query =
-            List.concat
-              [
-                [ ("updateMask", [ update_mask ]) ];
-                query_opt "requestId" request_id;
-              ]
-          in
-          call_in_project ?project_id ~meth:`PATCH ~query
-            ~body:(Resource_allowance.to_yojson body)
-            ~path:(fun ~project_id ->
-              Printf.sprintf "%s/resourceAllowances/%s"
-                (Api.path ~project_id ~location)
-                resource_allowance)
-            Resource_allowance.of_yojson
+          let patch ?project_id ~location ?request_id ~update_mask
+              ~resource_allowance (body : Resource_allowance.t) :
+              (Resource_allowance.t, [> Error.t ]) result Async.t =
+            let query =
+              List.concat
+                [
+                  [ ("updateMask", [ update_mask ]) ];
+                  query_opt "requestId" request_id;
+                ]
+            in
+            Api.call_in_project ?project_id ~meth:`PATCH ~query
+              ~body:(Resource_allowance.to_yojson body)
+              ~path:(fun ~project_id ->
+                Printf.sprintf "%s/resourceAllowances/%s"
+                  (Api.path ~project_id ~location)
+                  resource_allowance)
+              Resource_allowance.of_yojson
+        end
       end
     end
   end

@@ -7,17 +7,10 @@
   gcloud_shared
   base64
   cohttp
-  cohttp-lwt
-  cohttp-lwt-unix
   containers
-  cstruct
   ezgzip
-  jose
   logs
-  logs.lwt
   ppx_deriving_yojson.runtime
-  ptime
-  ptime.clock.os
-  x509
-  yojson
-  lwt))
+  unix
+  uri
+  yojson))

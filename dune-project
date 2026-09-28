@@ -10,23 +10,40 @@
 (package
  (name gcloud)
  (synopsis "Bindings to Google Cloud Platform APIs")
- (description "")
+ (description "Runtime-agnostic core: types, and service bindings as functors over an async runtime and an HTTP client. Pair with a backend such as gcloud-lwt.")
+ (depends
+   base64
+   cohttp
+   containers
+   dune
+   ezgzip
+   logs
+   ppx_deriving
+   ppx_deriving_yojson
+   uri
+   yojson))
+
+(package
+ (name gcloud-lwt)
+ (synopsis "Lwt + cohttp backend for ocaml-gcloud")
+ (description "Credential discovery, HTTP client and Lwt instantiations of every gcloud service module.")
  (depends
   (alcotest :with-test)
   (alcotest-lwt :with-test)
-   base64
+   gcloud
    cohttp
+   cohttp-lwt
    cohttp-lwt-unix
    containers
    cstruct
    dune
-   ezgzip
    jose
    logs
    lwt
-   ppx_deriving_yojson
   (ppx_here :with-test)
+   ptime
   (tls :with-test)
+   uri
   (x509 (and (>= 0.12.0) (< 1.0))) ;; Required for the ~sloppy:true arg becoming the default
    yojson))
 
@@ -42,7 +59,7 @@
  (synopsis "CLI for accessing Google Cloud Platform APIs")
  (description "For when the official gcloud distribution is too heavyweight.")
  (depends
-   gcloud
+   gcloud-lwt
    (cohttp (< 6))
    cmdliner
    logs

@@ -1,5 +1,3 @@
-let ok = Lwt_result.ok
-
 module Scopes = struct
   let devstorage_read_only =
     "https://www.googleapis.com/auth/devstorage.read_only"
@@ -8,240 +6,175 @@ module Scopes = struct
     "https://www.googleapis.com/auth/devstorage.read_write"
 end
 
-type object_ = {
-  name : string;
-  time_created : string; [@key "timeCreated"]
-  id : string; (* Other fields not parsed currently *)
-}
-[@@deriving yojson { strict = false }]
-(** https://cloud.google.com/storage/docs/json_api/v1/objects#resource *)
+module Types = struct
+  type object_ = {
+    name : string;
+    time_created : string; [@key "timeCreated"]
+    id : string; (* Other fields not parsed currently *)
+  }
+  [@@deriving yojson { strict = false }]
+  (** https://cloud.google.com/storage/docs/json_api/v1/objects#resource *)
 
-let get_object_stream (bucket_name : string) (object_path : string) :
-    (string Lwt_stream.t, [> Error.t ]) Lwt_result.t =
-  let open Lwt_result.Infix in
-  Common.get_access_token ~scopes:[ Scopes.devstorage_read_only ] ()
-  >>= fun token_info ->
-  Lwt.catch
-    (fun () ->
-      let uri =
-        Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
-          ~path:
-            (Printf.sprintf "storage/v1/b/%s/o/%s" bucket_name
-               (Uri.pct_encode object_path))
-          ~query:[ ("alt", [ "media" ]) ]
-      in
-      let headers =
-        Cohttp.Header.of_list
-          [
-            ( "Authorization",
-              Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
-          ]
-      in
-      Cohttp_lwt_unix.Client.get uri ~headers |> Lwt_result.ok)
-    (fun e -> Lwt_result.fail (`Network_error e))
-  >>= fun (resp, body) ->
-  match Cohttp.Response.status resp with
-  | `OK -> Cohttp_lwt.Body.to_stream body |> Lwt_result.return
-  | status_code ->
-      Cohttp_lwt.Body.to_string body
-      |> ok
-      >>= Error.of_response_status_code_and_body status_code
+  type rewrite_object_response = {
+    kind : string;
+    total_bytes_rewritten : string; [@key "totalBytesRewritten"]
+    object_size : string; [@key "objectSize"]
+    done_ : bool; [@key "done"]
+    rewrite_token : string option; [@key "rewriteToken"] [@default None]
+    resource : Yojson.Safe.t option; [@default None]
+  }
+  [@@deriving yojson]
 
-let get_object (bucket_name : string) (object_path : string) :
-    (string, [> Error.t ]) Lwt_result.t =
-  let open Lwt_result.Infix in
-  get_object_stream bucket_name object_path >>= fun stream ->
-  Lwt_stream.to_list stream |> Lwt.map (String.concat "") |> Lwt_result.ok
+  [@@@warning "-39"]
 
-let insert_object_ ~if_generation_match ~if_generation_not_match bucket_name
-    name (body : Cohttp_lwt.Body.t) : (object_, [> Error.t ]) Lwt_result.t =
-  let open Lwt_result.Infix in
-  Common.get_access_token ~scopes:[ Scopes.devstorage_read_write ] ()
-  >>= fun token_info ->
-  Lwt.catch
-    (fun () ->
-      let uri =
-        let query =
-          List.concat
-            [
-              [ ("name", [ name ]); ("uploadType", [ "media" ]) ];
-              (match if_generation_match with
-              | Some v -> [ ("ifGenerationMatch", [ string_of_int v ]) ]
-              | None -> []);
-              (match if_generation_not_match with
-              | Some v -> [ ("ifGenerationNotMatch", [ string_of_int v ]) ]
-              | None -> []);
-            ]
-        in
-        Uri.make () ~scheme:"https" ~host:"storage.googleapis.com"
-          ~path:(Printf.sprintf "upload/storage/v1/b/%s/o" bucket_name)
-          ~query
-      in
-      let headers =
-        Cohttp.Header.of_list
-          [
-            ( "Authorization",
-              Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
-          ]
-      in
-      let open Lwt.Infix in
-      Cohttp_lwt_unix.Client.post uri ~headers ~body >>= Util.consume_body |> ok)
-    (fun e -> Lwt_result.fail (`Network_error e))
-  >>= fun (resp, body) ->
-  match Cohttp.Response.status resp with
-  | `OK -> Error.parse_body_json object__of_yojson body |> Lwt.return
-  | status_code -> Error.of_response_status_code_and_body status_code body
+  type list_objects_response = {
+    kind : string;
+    next_page_token : string option; [@default None] [@key "nextPageToken"]
+    prefixes : string list; [@default []]
+    items : object_ list; [@default []]
+  }
+  [@@deriving yojson]
 
-let insert_object ?if_generation_match ?if_generation_not_match bucket_name name
-    (data : string) : (object_, [> Error.t ]) Lwt_result.t =
-  let body = Cohttp_lwt.Body.of_string data in
-  insert_object_ ~if_generation_match ~if_generation_not_match bucket_name name
-    body
+  [@@@warning "+39"]
+end
 
-let insert_object_stream ?if_generation_match ?if_generation_not_match
-    bucket_name name (data : string Lwt_stream.t) :
-    (object_, [> Error.t ]) Lwt_result.t =
-  let body = Cohttp_lwt.Body.of_stream data in
-  insert_object_ ~if_generation_match ~if_generation_not_match bucket_name name
-    body
+include Types
 
-type rewrite_object_response = {
-  kind : string;
-  total_bytes_rewritten : string; [@key "totalBytesRewritten"]
-  object_size : string; [@key "objectSize"]
-  done_ : bool; [@key "done"]
-  rewrite_token : string option; [@key "rewriteToken"] [@default None]
-  resource : Yojson.Safe.t option; [@default None]
-}
-[@@deriving yojson]
+(** Query parameters for the [ifGenerationMatch] / [ifGenerationNotMatch]
+    preconditions. *)
+let generation_query ~if_generation_match ~if_generation_not_match =
+  List.concat
+    [
+      (match if_generation_match with
+      | Some v -> [ ("ifGenerationMatch", [ string_of_int v ]) ]
+      | None -> []);
+      (match if_generation_not_match with
+      | Some v -> [ ("ifGenerationNotMatch", [ string_of_int v ]) ]
+      | None -> []);
+    ]
 
-(** NOTE: Multiple request rewrites not currently implemented.
-    https://cloud.google.com/storage/docs/json_api/v1/objects/rewrite
- *)
-let rewrite_object source_bucket source_object destination_bucket
-    destination_object : (rewrite_object_response, [> Error.t ]) Lwt_result.t =
-  let open Lwt_result.Infix in
-  Common.get_access_token ~scopes:[ Scopes.devstorage_read_write ] ()
-  >>= fun token_info ->
-  Lwt.catch
-    (fun () ->
-      let uri =
-        let source_object = Uri.pct_encode source_object in
-        let destination_object = Uri.pct_encode destination_object in
-        Uri.make () ~scheme:"https" ~host:"storage.googleapis.com"
-          ~path:
-            (Printf.sprintf "storage/v1/b/%s/o/%s/rewriteTo/b/%s/o/%s"
-               source_bucket source_object destination_bucket destination_object)
-      in
-      let headers =
-        Cohttp.Header.of_list
-          [
-            ( "Authorization",
-              Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
-          ]
-      in
-      let body = Cohttp_lwt.Body.empty in
-      let open Lwt.Infix in
-      Cohttp_lwt_unix.Client.post uri ~headers ~body >>= Util.consume_body |> ok)
-    (fun e -> Lwt_result.fail (`Network_error e))
-  >>= fun (resp, body) ->
-  match Cohttp.Response.status resp with
-  | `OK ->
-      Error.parse_body_json rewrite_object_response_of_yojson body |> Lwt.return
-  | status_code -> Error.of_response_status_code_and_body status_code body
+(** Streaming variants ([get_object_stream], [insert_object_stream]) are
+    specific to the Lwt backend; see [Gcloud_lwt.Storage]. *)
+module Make
+    (Async : Async_task_sig.S)
+    (Client : Client_sig.S with type 'a task = 'a Async.t) =
+struct
+  type 'a task = 'a Async.t
 
-[@@@warning "-39"]
+  module R = Async_task_result.Make (Async)
+  module Req = Request.Make (Async) (Client)
+  module Scopes = Scopes
+  include Types
 
-type list_objects_response = {
-  kind : string;
-  next_page_token : string option; [@default None] [@key "nextPageToken"]
-  prefixes : string list; [@default []]
-  items : object_ list; [@default []]
-}
-[@@deriving yojson]
+  let get_object (bucket_name : string) (object_path : string) :
+      (string, [> Error.t ]) result task =
+    let open R.Infix in
+    Client.get_access_token ~scopes:[ Scopes.devstorage_read_only ] ()
+    >>= fun token_info ->
+    let uri =
+      Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
+        ~path:
+          (Printf.sprintf "storage/v1/b/%s/o/%s" bucket_name
+             (Uri.pct_encode object_path))
+        ~query:[ ("alt", [ "media" ]) ]
+    in
+    let headers = Cohttp.Header.of_list [ Req.bearer token_info ] in
+    Req.call ~meth:`GET ~headers uri >>= fun (status, body) ->
+    match status with
+    | `OK -> R.return body
+    | status_code ->
+        R.lift (Error.of_response_status_code_and_body status_code body)
 
-[@@@warning "+39"]
-
-let list_objects ?(delimiter : string option) ?(prefix : string option)
-    ?(page_token : string option) ~(bucket_name : string) () :
-    (list_objects_response, [> Error.t ]) Lwt_result.t =
-  let open Lwt_result.Infix in
-  Common.get_access_token ~scopes:[ Scopes.devstorage_read_only ] ()
-  >>= fun token_info ->
-  Lwt.catch
-    (fun () ->
+  let insert_object ?if_generation_match ?if_generation_not_match bucket_name
+      name (data : string) : (object_, [> Error.t ]) result task =
+    let open R.Infix in
+    Client.get_access_token ~scopes:[ Scopes.devstorage_read_write ] ()
+    >>= fun token_info ->
+    let uri =
       let query =
-        List.concat
-          [
-            delimiter
-            |> CCOption.map_or ~default:[] (fun d -> [ ("delimiter", [ d ]) ]);
-            prefix
-            |> CCOption.map_or ~default:[] (fun p -> [ ("prefix", [ p ]) ]);
-            page_token
-            |> CCOption.map_or ~default:[] (fun t -> [ ("pageToken", [ t ]) ]);
-          ]
+        [ ("name", [ name ]); ("uploadType", [ "media" ]) ]
+        @ generation_query ~if_generation_match ~if_generation_not_match
       in
-      let uri =
-        Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
-          ~path:(Printf.sprintf "storage/v1/b/%s/o" bucket_name)
-          ~query
-      in
-      let headers =
-        Cohttp.Header.of_list
-          [
-            ( "Authorization",
-              Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
-          ]
-      in
-      let open Lwt.Infix in
-      Cohttp_lwt_unix.Client.get uri ~headers >>= Util.consume_body |> ok)
-    (fun e -> Lwt_result.fail (`Network_error e))
-  >>= fun (resp, body) ->
-  match Cohttp.Response.status resp with
-  | `OK ->
-      Error.parse_body_json list_objects_response_of_yojson body |> Lwt.return
-  | status_code -> Error.of_response_status_code_and_body status_code body
+      Uri.make () ~scheme:"https" ~host:"storage.googleapis.com"
+        ~path:(Printf.sprintf "upload/storage/v1/b/%s/o" bucket_name)
+        ~query
+    in
+    let headers = Cohttp.Header.of_list [ Req.bearer token_info ] in
+    Req.call ~meth:`POST ~headers ~body:data uri >>= fun (status, body) ->
+    match status with
+    | `OK -> R.lift (Error.parse_body_json object__of_yojson body)
+    | status_code ->
+        R.lift (Error.of_response_status_code_and_body status_code body)
 
-let delete_object ?if_generation_match ?if_generation_not_match
-    (bucket_name : string) (object_path : string) :
-    (unit, [> Error.t ]) Lwt_result.t =
-  let open Lwt_result.Syntax in
-  let* token_info =
-    Common.get_access_token ~scopes:[ Scopes.devstorage_read_write ] ()
-  in
-  let* resp, body =
-    Lwt.catch
-      (fun () ->
-        let uri =
-          let query =
-            List.concat
-              [
-                (match if_generation_match with
-                | Some v -> [ ("ifGenerationMatch", [ string_of_int v ]) ]
-                | None -> []);
-                (match if_generation_not_match with
-                | Some v -> [ ("ifGenerationNotMatch", [ string_of_int v ]) ]
-                | None -> []);
-              ]
-          in
-          Uri.make () ~scheme:"https" ~host:"storage.googleapis.com"
-            ~path:
-              (Printf.sprintf "storage/v1/b/%s/o/%s" bucket_name
-                 (Uri.pct_encode object_path))
-            ~query
-        in
-        let headers =
-          Cohttp.Header.of_list
-            [
-              ( "Authorization",
-                Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
-            ]
-        in
-        let open Lwt.Infix in
-        Cohttp_lwt_unix.Client.delete uri ~headers >>= Util.consume_body |> ok)
-      (fun e -> Lwt_result.fail (`Network_error e))
-  in
-  match Cohttp.Response.status resp with
-  (* Deletion returns a 204 *)
-  | Cohttp.Code.(#success_status) -> Lwt_result.return ()
-  | status_code -> Error.of_response_status_code_and_body status_code body
+  (** NOTE: Multiple request rewrites not currently implemented.
+      https://cloud.google.com/storage/docs/json_api/v1/objects/rewrite *)
+  let rewrite_object source_bucket source_object destination_bucket
+      destination_object : (rewrite_object_response, [> Error.t ]) result task =
+    let open R.Infix in
+    Client.get_access_token ~scopes:[ Scopes.devstorage_read_write ] ()
+    >>= fun token_info ->
+    let uri =
+      let source_object = Uri.pct_encode source_object in
+      let destination_object = Uri.pct_encode destination_object in
+      Uri.make () ~scheme:"https" ~host:"storage.googleapis.com"
+        ~path:
+          (Printf.sprintf "storage/v1/b/%s/o/%s/rewriteTo/b/%s/o/%s"
+             source_bucket source_object destination_bucket destination_object)
+    in
+    let headers = Cohttp.Header.of_list [ Req.bearer token_info ] in
+    Req.call ~meth:`POST ~headers uri >>= fun (status, body) ->
+    match status with
+    | `OK ->
+        R.lift (Error.parse_body_json rewrite_object_response_of_yojson body)
+    | status_code ->
+        R.lift (Error.of_response_status_code_and_body status_code body)
+
+  let list_objects ?(delimiter : string option) ?(prefix : string option)
+      ?(page_token : string option) ~(bucket_name : string) () :
+      (list_objects_response, [> Error.t ]) result task =
+    let open R.Infix in
+    Client.get_access_token ~scopes:[ Scopes.devstorage_read_only ] ()
+    >>= fun token_info ->
+    let query =
+      List.concat
+        [
+          delimiter
+          |> CCOption.map_or ~default:[] (fun d -> [ ("delimiter", [ d ]) ]);
+          prefix |> CCOption.map_or ~default:[] (fun p -> [ ("prefix", [ p ]) ]);
+          page_token
+          |> CCOption.map_or ~default:[] (fun t -> [ ("pageToken", [ t ]) ]);
+        ]
+    in
+    let uri =
+      Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
+        ~path:(Printf.sprintf "storage/v1/b/%s/o" bucket_name)
+        ~query
+    in
+    let headers = Cohttp.Header.of_list [ Req.bearer token_info ] in
+    Req.call ~meth:`GET ~headers uri >>= fun (status, body) ->
+    match status with
+    | `OK -> R.lift (Error.parse_body_json list_objects_response_of_yojson body)
+    | status_code ->
+        R.lift (Error.of_response_status_code_and_body status_code body)
+
+  let delete_object ?if_generation_match ?if_generation_not_match
+      (bucket_name : string) (object_path : string) :
+      (unit, [> Error.t ]) result task =
+    let open R.Infix in
+    Client.get_access_token ~scopes:[ Scopes.devstorage_read_write ] ()
+    >>= fun token_info ->
+    let uri =
+      Uri.make () ~scheme:"https" ~host:"storage.googleapis.com"
+        ~path:
+          (Printf.sprintf "storage/v1/b/%s/o/%s" bucket_name
+             (Uri.pct_encode object_path))
+        ~query:(generation_query ~if_generation_match ~if_generation_not_match)
+    in
+    let headers = Cohttp.Header.of_list [ Req.bearer token_info ] in
+    Req.call ~meth:`DELETE ~headers uri >>= fun (status, body) ->
+    match status with
+    (* Deletion returns a 204 *)
+    | Cohttp.Code.(#success_status) -> R.return ()
+    | status_code ->
+        R.lift (Error.of_response_status_code_and_body status_code body)
+end
