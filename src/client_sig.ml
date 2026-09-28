@@ -4,7 +4,7 @@
     one at runtime and pass it to the service functors, or around as a
     first-class module. It is independent of the async runtime: results are
     wrapped in an abstract ['a task], which a service functor ties to its
-    {!Async_task.S} argument with
+    {!Async_task_sig.S} argument with
     [Client : S with type 'a task = 'a Async.t]. No backend is provided here. *)
 module type S = sig
   type 'a task
@@ -18,7 +18,7 @@ module type S = sig
   (** Perform one HTTP request and return the status code and the full
       response body. Bodies are strings on both sides: every Google JSON API
       payload the bindings deal with is small. Transport exceptions may be
-      raised and are caught by the caller with {!Async_task.S.catch}. *)
+      raised and are caught by the caller with {!Async_task_sig.S.catch}. *)
 
   val get_access_token :
     scopes:string list -> unit -> (Auth.token_info, [> Error.t ]) result task
