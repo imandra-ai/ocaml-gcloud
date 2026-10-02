@@ -1,0 +1,7 @@
+[submodule "src"]
+	path = src
+	url = git@github.com:imandra-ai/ocaml-gcloud-src.git
+	branch = seb/batch-bindings
+[submodule "vendor/packed"]
+	path = vendor/packed
+	url = https://github.com/imandra-ai/packed.git

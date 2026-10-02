@@ -12,7 +12,14 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         onix' = onix.packages.${system}.latest;
-        opamFiles = [ ./gcloud.opam ./gcloud-cli.opam ];
+        opamFiles = [
+          ./src/gcloud.opam
+          ./src/gcloud-lwt.opam
+          ./src/gcloud-direct.opam
+          ./src/gcloud-cli.opam
+          ./vendor/packed/packed-error.opam
+          ./vendor/packed/packed-error-factory.opam
+        ];
         onixEnv = onix'.env {
           path = ./.;
           roots = opamFiles;
@@ -21,7 +28,7 @@
         };
         onixEnvDev = onix'.env {
           path = ./.;
-          roots = opamFiles ++ [ ./gcloud-melange.opam ];
+          roots = opamFiles ++ [ ./src/gcloud-melange.opam ];
           lock = ./onix-lock-dev.json;
           deps = {
             "ocaml-system" = "*";

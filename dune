@@ -1,0 +1,8 @@
+(vendored_dirs vendor)
+
+; Test groupings, by what the tests depend on (same taxonomy as imandra-web):
+;
+;   dune build @src/local-tests     -- hermetic; also what [runtest] runs.
+;   dune build @src/external-tests  -- real GCP calls; needs credentials for
+;                                      the imandra-dev project. Off [runtest];
+;                                      CI only compiles these.
