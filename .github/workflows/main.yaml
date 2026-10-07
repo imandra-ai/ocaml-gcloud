@@ -4,6 +4,9 @@ on:
   workflow_dispatch:
   pull_request:
   push:
+  # Merge queue: master's ruleset requires [external-tests], which only runs
+  # here, so the live GCP tests gate every merge without running per push.
+  merge_group:
 
 permissions:
   id-token: write
@@ -41,8 +44,39 @@ jobs:
     - run: opam install ./src ./vendor/packed --deps-only --with-test
     - run: opam exec -- dune build
     - run: opam exec -- dune build @src/local-tests
-    # Compile-only: @external-tests needs GCP credentials.
+    # Compile-only here; the [external-tests] job runs them in the merge queue.
     - run: opam exec -- dune build src/external_test/external_tests.exe
+
+  # Live GCP tests. Skipped on pull_request/push (a skipped required check
+  # passes), run on merge_group so a failure ejects the PR from the queue.
+  # Same Workload Identity Federation setup as imandra-web's external tests;
+  # the credentials file it writes is picked up via GOOGLE_APPLICATION_CREDENTIALS.
+  external-tests:
+    if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: true
+        token: ${{ secrets.SUBMODULE_CLONE_TOKEN || github.token }}
+    - name: Prune nested submodules
+      run: ./prune-submodules.sh
+    - name: Set up OCaml 5.1
+      uses: ocaml/setup-ocaml@v3
+      with:
+          ocaml-compiler: "5.1"
+    - name: Install system dependencies
+      run: sudo apt-get update && sudo apt-get install -y libcurl4-gnutls-dev
+    - run: opam install ./src ./vendor/packed --deps-only --with-test
+    - id: auth
+      name: Authenticate to GCP
+      uses: google-github-actions/auth@v2
+      with:
+        create_credentials_file: "true"
+        workload_identity_provider: "projects/935198164717/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
+        service_account: "imandra-github-actions@imandra-dev.iam.gserviceaccount.com"
+    - run: opam exec -- dune build @src/external-tests --force
 
   format:
     runs-on: ubuntu-latest
