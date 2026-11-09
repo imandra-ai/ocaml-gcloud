@@ -366,6 +366,11 @@ module Jobs = struct
   }
   [@@deriving to_yojson]
 
+  type labels = (string * string) list
+
+  let labels_to_yojson (labels : labels) : Yojson.Safe.t =
+    `Assoc (List.map (fun (k, v) -> (k, `String v)) labels)
+
   type query_request = {
     kind : string;
     query : string;
@@ -378,6 +383,13 @@ module Jobs = struct
     format_options : data_format_options option;
         [@key "formatOptions"] [@default None]
     max_results : int option; [@key "maxResults"] [@default None]
+    timeout_ms : int option; [@key "timeoutMs"] [@default None]
+    (* int64 fields travel as decimal strings in the BigQuery JSON API. *)
+    job_timeout_ms : string option; [@key "jobTimeoutMs"] [@default None]
+    maximum_bytes_billed : string option;
+        [@key "maximumBytesBilled"] [@default None]
+    request_id : string option; [@key "requestId"] [@default None]
+    labels : labels option; [@default None]
   }
   [@@deriving to_yojson]
 
@@ -681,7 +693,8 @@ module Jobs = struct
     |> CCOption.map_or ~default:true bool_of_string
 
   let query ?project_id ?dry_run ?(use_legacy_sql = false) ?(params = [])
-      ?location ?use_int64_timestamp ?max_results q :
+      ?location ?use_int64_timestamp ?max_results ?timeout_ms ?job_timeout_ms
+      ?maximum_bytes_billed ?request_id ?labels q :
       (query_response, [> Error.t ]) Lwt_result.t =
     let parameter_mode =
       if use_legacy_sql || params = [] then None else Some NAMED
@@ -703,6 +716,11 @@ module Jobs = struct
         query_parameters = params;
         format_options;
         max_results;
+        timeout_ms;
+        job_timeout_ms = CCOption.map string_of_int job_timeout_ms;
+        maximum_bytes_billed = CCOption.map string_of_int maximum_bytes_billed;
+        request_id;
+        labels;
       }
     in
 
@@ -757,7 +775,7 @@ module Jobs = struct
         Error.of_response_status_code_and_body ~gzipped:use_gzip status_code
           body
 
-  let get_query_results ?page_token ?use_int64_timestamp
+  let get_query_results ?page_token ?use_int64_timestamp ?timeout_ms
       (job_reference : job_reference) :
       (query_response, [> Error.t ]) Lwt_result.t =
     let open Lwt_result.Infix in
@@ -778,6 +796,8 @@ module Jobs = struct
         use_int64_timestamp
         |> CCOption.map (fun b ->
                ("formatOptions.useInt64Timestamp", [ string_of_bool b ]));
+        timeout_ms
+        |> CCOption.map (fun ms -> ("timeoutMs", [ string_of_int ms ]));
       ]
       |> CCList.filter_map CCFun.id
     in
@@ -812,6 +832,50 @@ module Jobs = struct
         >>= fun response ->
         L.debug (fun m -> m "%a" pp_query_response response) |> Lwt_result.ok
         >>= fun () -> Lwt_result.return response
+    | status_code ->
+        Error.of_response_status_code_and_body ~gzipped:use_gzip status_code
+          body
+
+  (* jobs.cancel. Best effort on BigQuery's side: the job is asked to stop
+     and usually does within seconds; a job that has already finished is a
+     successful no-op. *)
+  let cancel (job_reference : job_reference) : (unit, [> Error.t ]) Lwt_result.t
+      =
+    let open Lwt_result.Infix in
+    let job_id =
+      match job_reference.job_id with
+      | None -> Error (`Msg "cancel: no job_id")
+      | Some job_id -> Ok job_id
+    in
+    Lwt.return job_id >>= fun job_id ->
+    Auth.get_access_token ~scopes:[ Scopes.bigquery ] ()
+    |> Lwt_result.map_error (fun e -> `Gcloud_auth_error e)
+    >>= fun token_info ->
+    let use_gzip = use_gzip () in
+    let uri =
+      Uri.make () ~scheme:"https" ~host:"www.googleapis.com"
+        ~path:
+          (Printf.sprintf "bigquery/v2/projects/%s/jobs/%s/cancel"
+             job_reference.project_id job_id)
+        ~query:[ ("location", [ job_reference.location ]) ]
+    in
+    let headers =
+      Cohttp.Header.of_list
+        [
+          ( "Authorization",
+            Printf.sprintf "Bearer %s" token_info.Auth.token.access_token );
+          ("Content-Length", "0");
+        ]
+      |> add_gzip_headers ~use_gzip
+    in
+    Lwt.catch
+      (fun () ->
+        let open Lwt.Infix in
+        Cohttp_lwt_unix.Client.post uri ~headers >>= Util.consume_body |> ok)
+      (fun e -> Lwt_result.fail (`Network_error e))
+    >>= fun (resp, body) ->
+    match Cohttp.Response.status resp with
+    | `OK -> Lwt_result.return ()
     | status_code ->
         Error.of_response_status_code_and_body ~gzipped:use_gzip status_code
           body

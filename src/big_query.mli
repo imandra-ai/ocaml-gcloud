@@ -168,14 +168,30 @@ module Jobs : sig
     ?location:string ->
     ?use_int64_timestamp:bool ->
     ?max_results:int ->
+    ?timeout_ms:int ->
+    ?job_timeout_ms:int ->
+    ?maximum_bytes_billed:int ->
+    ?request_id:string ->
+    ?labels:(string * string) list ->
     string ->
     (query_response, [> Error.t ]) Lwt_result.t
+  (** [timeout_ms] is how long the call waits for the job to finish before
+      returning an incomplete response (BigQuery's default is 10 s).
+      [job_timeout_ms] makes BigQuery itself stop the job after that long,
+      whether or not anyone is still polling it. [request_id] dedupes
+      identical submissions within 15 min. [labels] end up on the job for
+      INFORMATION_SCHEMA. *)
 
   val get_query_results :
     ?page_token:string ->
     ?use_int64_timestamp:bool ->
+    ?timeout_ms:int ->
     job_reference ->
     (query_response, [> Error.t ]) Lwt_result.t
+
+  val cancel : job_reference -> (unit, [> Error.t ]) Lwt_result.t
+  (** jobs.cancel. Best effort: BigQuery attempts to stop the job, usually
+      within seconds; cancelling a finished job succeeds and does nothing. *)
 
   type query_response_complete = {
     kind : string;
